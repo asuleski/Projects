@@ -3,7 +3,7 @@
 There are a variety of projects from my undergraduate career at Indiana University - Bloomington. Each project has the source code R Markdown and the knitted html document.
 
 * Sea Surface Temperatures (4/2020)
-  * Create time series models to predict sea surface temperatures
+  * Examine time series models to predict sea surface temperatures
 * Income Mobility (12/2019)
   * Nonparametric analysis of the probability that a child born in 1980–1982 into the lowest quintile of household incomes will be in the top quintile of household incomes at age 30
 * Mismanaged Waste (12/2019)
