@@ -1,0 +1,531 @@
+---
+title: "The Name Game"
+author: "Ann Marie, Evan, Katie, Amanda"
+date: "March 10, 2019"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r libraries, echo=FALSE, warning=FALSE, message=FALSE}
+library(ggplot2)
+library(GGally)
+library(MASS)
+library(class)
+library(tree)
+library(randomForest)
+library(caret)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(usmap)
+library(nnet)
+library(readxl)
+library(reshape2)
+library(reshape)
+library(gridExtra)
+
+opts_chunk$set(echo=FALSE, cache=TRUE, autodep=TRUE, 
+               message=FALSE, warning=FALSE)
+```
+
+# Introduction
+
+This data set was created in response to a "Dear Mona" question on FiveThiryEight, which asked what the <strong>most common name</strong> in America was. The data sets we used are under the most-common-name folder in FiveThirtyEight's Github repository. We have several questions for this data, some more ambitious than others. Using four datasets from this repository, we created data frames containing information on the top surnames, top firstnames, state populations, racial breakdowns and name lengths to help answer our research questions. Within this data, specifically in terms of racial breakdown, we see specific abbreviations for the racial groups:  
+
+* <strong>AIAN</strong>: American Indians and Alaskan Natives
+* <strong>API</strong>: Asian/Pacific Islanders
+* <strong>2prace</strong>: Those belonging to two or more races
+* <strong>White</strong>, <strong>black</strong> and <strong>hispanic</strong> are self-explanatory.
+
+## Data Frames:  
+
+1. new-top-surnames.csv:  
+    +  <strong>name</strong>: the top 100 surnames from 2013  
+    +  <strong>perct2013</strong>: the percent of occurence of that name in 2013
+2. new-top-firstNames.csv  
+    +  <strong>name</strong>: the top 100 first names from 2013  
+    +  <strong>newPerct2013</strong>: the percent of occurence of that name in 2013  
+3. state-pop.csv:  
+    +  <strong>state</strong>: all 50 states and D.C.  
+    +  <strong>totalPop</strong>: total population for each state  
+    +  <strong>hispPop</strong>: the hispanic population for each state  
+4. surnames.csv:  
+    +  <strong>name</strong>: data on the 151,671 surnames of America (in common use according to the U.S. Census)  
+    +  <strong>rank</strong>: the rank of surname popularity  
+    +  <strong>count</strong>: the number of occurence of the surname  
+    +  <strong>pctwhite</strong>: percent of people with the surname that are white  
+    +  <strong>pctblack</strong>: percent of people with the surname that are black  
+    +  <strong>pctapi</strong>: percent of people with the surname that are API 
+    +  <strong>pctaian</strong>: percent of people with the surname that are AIAN  
+    +  <strong>pct2prace</strong>: percent of people with the surname that pertain to two or more racial groups  
+    +  <strong>pcthispanic</strong>: percent of people with the surname that are hispanic 
+
+The first goal we have is to explore how names vary based on gender, ethnicity, and geography. We have information on names per state, as well as by race and gender. We want to answer: How likely is it that a person could guess your name based on gender, ethnicity, of geography (within the U.S.), or some combination of the three?
+
+We know that names plays an important role in the job market. Employers, hiring managers, and even AI-powered resume-screening software hold biases based on those names. One study by Marquette University [1] found that people with common names were more likely to be hired, and those with rare names were less likely to be hired. Additionally, another study [2] discovered that job candidates with white-sounding names like Emily Walsh and Greg Baker got 50% more callbacks than candidates with black-sounding names like Lakisha Washington and Jamal Jones. People with longer or less common names that are hard to pronounce or recognize have a disadvantage in the job hunt as well as in their careers, especially in certain fields like law. They quantified this and determined that having a white-sounding name is worth as much as eight years of work experience. Our second goal is to see how likely it is to guess the length of someone's name given their ethnicity or the commonality of their name for this application. 
+
+With some analysis, we are confident in our ability to answer our first question. However, our second goal is much more ambitious.
+
+## References:  
+
+1. The "Name Game": Affective and Hiring Reactions to First Names (https://www.emeraldinsight.com/doi/abs/10.1108/02683940810849648)  
+2. Are Emily and Greg More Employable than Lakisha and Jamal? A Field Experiment on Labor Market Discrimination (https://www.aeaweb.org/articles?id=10.1257/0002828042002561)
+
+```{r, echo=FALSE, message=FALSE}
+state_pop <- read_excel("most-common-name/state-pop.xlsx")
+state_pop <- na.omit(state_pop)
+```
+
+# Exploratory Data Analysis
+
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+avg.state.pop <- mean(state_pop$totalPop) #6053834
+avg.hisp.state.pop <- mean(state_pop$hispPop) #989756.7
+avg.hisp.prt <- avg.hisp.state.pop/avg.state.pop  #approx 16% 
+hisp.prt <- state_pop$hispPop/state_pop$totalPop #proportion of hisp in each state
+state_pop$hisp.prt <- hisp.prt
+state_pop$fips <- fips(state_pop$state)
+
+plot_usmap(data = state_pop, values = "totalPop", lines = "black") + scale_fill_continuous(name = "State Population 2013", label = scales::comma) + theme(legend.position = "right")
+```
+
+
+This shows the total population for each state. We originally were going to look into how the race and length of names change by region. For example, there may be a higher concentration of traditional hispanic names in the American Southwest as opposed to the New England arera. However this objective became too ambitious. 
+
+```{r, echo=FALSE}
+surnames <- read.csv("most-common-name/surnames.csv")
+surnames <- surnames %>% arrange(surnames$rank)
+surnames$pctwhite <- as.numeric(levels(surnames$pctwhite))[surnames$pctwhite]
+surnames$pctblack <- as.numeric(levels(surnames$pctblack))[surnames$pctblack]
+surnames$pcthispanic <- as.numeric(levels(surnames$pcthispanic))[surnames$pcthispanic]
+surnames$pctaian <- as.numeric(levels(surnames$pctaian))[surnames$pctaian]
+surnames$pctapi <- as.numeric(levels(surnames$pctapi))[surnames$pctapi]
+surnames$pct2prace <- as.numeric(levels(surnames$pct2prace))[surnames$pct2prace]
+
+surnames$whiteNum <- as.numeric(surnames$count) * as.numeric(surnames$pctwhite)/100
+surnames$blackNum <- as.numeric(surnames$count) * as.numeric(surnames$pctblack)/100
+surnames$apiNum <- as.numeric(surnames$count) * as.numeric(surnames$pctapi)/100
+surnames$aianNum <- as.numeric(surnames$count) * as.numeric(surnames$pctaian)/100
+surnames$twoRaceNum <- as.numeric(surnames$count) * as.numeric(surnames$pct2prace)/100
+surnames$hispNum <- as.numeric(surnames$count) * as.numeric(surnames$pcthispanic)/100
+
+whitepop <- sum(surnames$whiteNum, na.rm = TRUE)
+blackpop <- sum(surnames$blackNum, na.rm = TRUE)
+hisppop <- sum(surnames$hispNum, na.rm = TRUE)
+
+surnames$whiteProp <- surnames$whiteNum/whitepop
+surnames$blackProp <- surnames$blackNum/blackpop
+surnames$hispProp <- surnames$hispNum/hisppop
+
+topSurnames  <- surnames[1:30,] #top 30 names
+raceSurnames <- data.frame(cbind(topSurnames$whiteNum, topSurnames$blackNum, topSurnames$apiNum, topSurnames$aianNum, topSurnames$twoRaceNum, topSurnames$hispNum))
+row.names(raceSurnames) <- topSurnames$name
+names(raceSurnames) <- c("white", "black", "api", "aian", "two races", "hispanic")
+raceSurnamesMatrix <- data.matrix(raceSurnames)
+heatmap(raceSurnamesMatrix, Rowv = NA, Colv = NA, cexCol = 1, cexRow = 0.65, xlab = "Race", ylab = "Surname")
+```
+
+The heatmap shows the popularity of the top 30 surnames for each race. White is the most popular followed by yellow, orange and red as the least popular. It appears that the most popular hispanic last names are almost exclusively hispanic.
+
+For the following plots, a few new variables were created.In order to more clearly judge the variables and avoid the influence of the large white population in the US, we created new variables for the white, black and hispanic populations (these being the largest populations and those of interest to us) showing proportions in terms of race instead of name. The provided variables showing percent occurence of each race give a racial breakdown of each name, that is the intersection of race and name divided by the total occurence of that name. For our variables of proportion, we divided the intersection of race and name by the total count of people of the specific race. In this way, we could avoid the effects of the large number of white participants in comparison with other races. 
+
+```{r,echo=FALSE}
+toSurnames = surnames[1:100,]
+
+p1 = ggplot(toSurnames, aes(x = rank, y = whiteProp)) + geom_point()
+p2 = ggplot(toSurnames, aes(x = rank, y = blackProp)) + geom_point()
+p3 = ggplot(toSurnames, aes(x = rank, y = hispProp)) + geom_point()
+
+grid.arrange(p1,p2,p3, ncol=1)
+
+```
+
+The three plots above show the proportion of each name for the three main race groups in the top 100 names. These were used to see any relationship between rank and race, which, as shown, appear to show something similar to an inverse function as well as lingering data points riding the x axis. This shows that the presence of names varies within each race.
+
+
+
+```{r, echo = FALSE}
+tpSurnames = melt(surnames[1:100,], id.vars = "rank", measure.vars = c("whiteProp", "blackProp", "hispProp"))
+
+ggplot(tpSurnames, aes(rank, value, color = variable)) + geom_point()
+
+```
+
+
+Continuing on the idea of relationships between race and rank, we melted the graphs together to see any overlaying comparisons that could be made. This graph shows that the high proportion names in the hispanic community correlate with the low proportion names in the other two communities. 
+
+
+```{r, echo=FALSE}
+# Get the lengths of names 
+names <- read.csv("most-common-name/adjusted-name-combinations-list.csv")
+
+get.lengths <- function(column){
+  n = nrow(names)
+  lengths <- vector(mode = "numeric", n)
+
+  for (r in 1:n){
+    lengths[r] = nchar(as.character(column[r]))
+  }
+  
+  return(lengths)
+}
+
+
+names.only <- data.frame(names$FirstName, names$Surname, get.lengths(names$FirstName), get.lengths(names$Surname), names$finalEstimate)
+colnames(names.only) <- c("FirstName", "Surname", "LenFirst", "LenLast", "Popularity")
+
+ggplot(data = names.only, aes(x = LenFirst, y = Popularity, label = FirstName)) + geom_text(check_overlap = TRUE)
+```
+
+With the plot above, we aimed to show the popularity of first names in terms of whole names, which is why the names are repeated. For example, the top Mary could be Mary Smith while the one underneath could be Mary Johnson. The plot aims to sort of plot out the data showing how popularity is arranged in terms of length. As seen, the most popular names range in length from 5 to 7.
+
+
+```{r, echo=FALSE}
+surnames400 <- surnames[1:400,] #taking the top 400 surnames to simplify coding
+length <- get.lengths(surnames400$name)
+lengthRace <- data.frame(cbind(length, surnames400))
+
+p4 = ggplot(data = lengthRace, aes(x = length, y = whiteProp)) + geom_point()
+p5 = ggplot(data = lengthRace, aes(x = length, y = blackProp)) + geom_point()
+p6 = ggplot(data = lengthRace, aes(x = length, y = hispProp)) + geom_point()
+
+grid.arrange(p4,p5,p6, ncol = 1)
+```
+
+These plots aim to differentiate between the races popularity of names in terms of race. In the plots, we see the max proportion in the white community at length 5, with the data somewhat centered around there. In the black community, the proportions are higher around 7 and 8, and in the hispanic community, the proportions are highest between 6 and 8.
+
+
+
+```{r, echo=FALSE}
+lnr = melt(lengthRace, id.vars = "length", measure.vars = c("whiteProp", "blackProp", "hispProp"))
+
+ggplot(lnr, aes(length, value, color = variable)) + geom_point()
+```
+
+
+We then melted these plots together to show an overlay plot of this data. As seen, the hispanic proportions tend to be higher, which could in part be due to a high presence of very few names within the community. The white proportions are the smallest due to a wide range of names with the lengths tending toward a smaller/moderate size.
+
+```{r, echo=FALSE}
+white.max = max(lengthRace$whiteProp)
+black.max = max(lengthRace$blackProp)
+hisp.max = max(lengthRace$hispProp)
+
+print("The name length with the highest proportion in the white community is:")
+(white_len = subset(lengthRace, whiteProp == white.max)$length)
+
+print("The name length with the highest proportion in the black community is:")
+(black_len = subset(lengthRace, blackProp == black.max)$length)
+
+print("The name length with the highest proportion in the hispanic community is:")
+(hisp_len = subset(lengthRace, hispProp == hisp.max)$length)
+```
+
+
+```{r, echo=FALSE}
+heatmapDF <- data.frame(cbind(lengthRace$pctwhite, lengthRace$pctblack, lengthRace$pctapi, lengthRace$pctaian, lengthRace$pct2prace, lengthRace$pcthispanic))
+names(heatmapDF) <- c("white", "black", "api", "aian", "two races", "hispanic")
+pairs(heatmapDF)
+```
+
+
+The heatmap shows that none of the races are correlated, thus we will be able to model with this data without breaking any assumptions.
+We constructed the pairs plot above to look for potential associations in the variables, specifically the different ethnic groups. This turned out not to be very helpful. 
+
+```{r, echo=FALSE}
+heatmapDF <- heatmapDF[1:30,]
+whiteTot <- sum(heatmapDF$white)
+blackTot <- sum(heatmapDF$black)
+apiTot <- sum(heatmapDF$api)
+aianTot <- sum(heatmapDF$aian)
+twoRaceTot <- sum(heatmapDF$`two races`)
+hispTot <- sum(heatmapDF$hispanic)
+heatmapDF$white <- heatmapDF$white/whiteTot
+heatmapDF$black <- heatmapDF$black/blackTot
+heatmapDF$api <- heatmapDF$api/apiTot
+heatmapDF$aian <- heatmapDF$aian/aianTot
+heatmapDF$`two races` <- heatmapDF$`two races`/twoRaceTot
+heatmapDF$hispanic <- heatmapDF$hispanic/hispTot
+heatmapMatrix <- data.matrix(heatmapDF)
+row.names(heatmapMatrix) <- lengthRace$length[1:30]
+heatmapMatrix <- aggregate(as.data.frame(heatmapMatrix), list(row.names(heatmapMatrix)), sum)
+row.names(heatmapMatrix) <- as.numeric(heatmapMatrix$Group.1)
+heatmapMatrix <- data.matrix(heatmapMatrix[,-1])
+heatmap(heatmapMatrix, Rowv = NA, Colv = NA, cexCol = 1, keep.dendro = FALSE, xlab = "Race", ylab = "Length of Surname")
+```
+
+
+This heatmap shows the popularity of each length within the race. Hispanic names tend to be longer than the length of white and black surnames. API has the shortest length popularity.
+
+
+# Modeling Attempt
+We will train several different models to try to predict the length of one's name including:
+
+* Logistic regression: this is used to explain the relationship between one dependent multinomial variable and several other independent variables.
+* LDA: this is typically used instead of logistic regression in multi-class (more than two) prediction, which we have.
+* KNN: this method is very different from the previous ones, as it is non-parametic and a somewhat lazy way of grouping data. This could be useful for our problem because KNN doesn't make any assumptions about the underlying data distribution, which is a shortfall of logistic regression and LDA
+* Bagging: this is used in tree-based approaches to reduce variance
+* Random Forest: bagging is not good for interpretability, so random forests can be used to actually decide which features are the best predictors. It works by recording the error (GINI) for each of the B trees, and reporting the average error reduction over all trees.
+
+We planned to predict length (2-9 characters) of one's surname using rank, proportions of black, white, and hispanic names, and we choose to omit the following ethnic groups: Asian Pacific Islander, American Indian and Alaskan Native, and 2 or more races because they have less data available. Our EDA also showed nothing valuable for these groups.
+
+```{r echo=FALSE}
+get.lengths2 <- function(column){
+  n = nrow(surnames400)
+  lengths <- vector(mode = "numeric", n)
+  for (r in 1:n){
+    lengths[r] = nchar(as.character(column[r]))
+  }
+  
+  return(lengths)
+}
+surnames400$length <- get.lengths2(surnames400$name)
+
+# split the data into train and test data
+set.seed(2332)
+n = 400
+split <- sample(1:n, size = n/2)
+training <- surnames400[split, ]
+test.data <- surnames400[-split, ]
+```
+
+## Logistic Regression
+For logistic regression, one of the first assumptions is that the outcome is a binary variable like yes or no, or 0 or 1. We do not have that case, so we think that LDA, which works better for multi-class predictions, will work better. After running logistic regression, we receive a warning due to there being more than 2 classes. This also results in the model always predicting 1.
+
+```{r logistic, echo=FALSE, message=FALSE, warning=FALSE}
+logistic.names <- glm(as.factor(length) ~ rank + as.numeric(whiteProp) + as.numeric(blackProp) + as.numeric(hispProp), family="binomial", data = surnames400, control=list(maxit=50))
+
+summary(logistic.names)
+
+logistic.preds <- predict(logistic.names, newdata = test.data[,-21], type = "response") # make predictions
+
+plot(logistic.preds)
+```
+
+## LDA
+Linear Discriminant Analysis (LDA) works better than logistic regression for multi-class prediction. LDA makes an assumption that the data is normal, which we verified in the EDA. We fit an LDA with the following equation [insert equation]. 
+
+We obtained an error rate of 0.7. The confusion matrix was difficult to interpret due to the 9 classes, but it can be seen below, with the sensitivity and specificity listed for each class. The plot shows the predicted values from LDA, and it is clear that it predicted that most names would be of length 6. It is understandable that it made this error (6 is the center of the distribution), however, because of this, LDA may not be the most accurate model to use.
+
+```{r lda, echo=FALSE}
+lda.names <- lda(length ~ rank + whiteProp + blackProp + hispProp, data = surnames400)
+
+lda.names.preds <- predict(lda.names, newdata = test.data[,-21])$class
+lda.err <- unname(1 - confusionMatrix(as.factor(lda.names.preds), as.factor(test.data[, 21]))[3]$overall[1])
+
+confusionMatrix(lda.names.preds, as.factor(test.data[, 21]))
+```
+
+
+```{r, echo=FALSE}
+plot(lda.names.preds, main="Counts of predicted values from LDA model", xlab="Length of name", ylab="Count")
+```
+
+
+## KNN
+K-nearest neighbors (KNN) calculates distances from one point to the next in order to group the points into clusters. Due to the way it calculates these distances, it works best with continuous values normalized to be between 0 and 1. We chose to only use whiteProp, blackProp and hispProp, excluding rank because it isn't a continuous variable. We predicted length (number from 2-9) as usual. 
+
+We obtained an error rate of 0.795. Again, the specificity and sensitivity can be seen in the confusion matrix below. Our accuracy for KNN was 17.5%, which is miserably low. The plot shows that KNN seemed to do a better job predicting names of all lengths than LDA did. 
+
+```{r knn, echo=FALSE}
+# method to normalize some of the columns in the data frame as it is one of the assumptions for KNN [source: Nick's lecture code]
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) 
+}
+
+names.knn <- as.data.frame(lapply(surnames400[c(18, 19, 20)], normalize))
+names.knn$length <- surnames400$length
+
+training.knn <- names.knn[1:200,]
+test.knn <- names.knn[201:400,]
+
+# decide the best k [source: Nick's lecture code]
+kmax = 100
+err = double(kmax)
+for(ii in 1:kmax){
+  pk = knn.cv(names.knn, names.knn$length, k=ii)
+  err[ii] = mean(pk != names.knn$length)
+}
+best.k <- max(which(err == min(err)))
+
+# pass the best k to the model
+knn.name = knn(training.knn, test = test.knn, cl = test.knn$length, k = best.k)
+
+knn.err <- unname(1 - confusionMatrix(as.factor(knn.name), as.factor(test.knn[, 4]))[3]$overall[1])
+confusionMatrix(as.factor(knn.name), as.factor(test.knn[, 4]))
+```
+
+
+```{r, echo=FALSE}
+plot(knn.name, main="Counts of predicted values from KNN model", xlab="Length of name", ylab="Count")
+```
+
+
+## Bagging
+Bagging is the most straighforward approach to use, as it doesn't make any assumptions about the data beforehand. From the tree, you can see the splits it chose. It is a little hard to interpret, but it chose most of the levels based off of the percentages of minorities, which is interesting.
+
+
+```{r bagging, echo=FALSE}
+B = 1
+set.seed(1)
+for(i in 1:B){
+  boot <- surnames400[sample(1:nrow(surnames400), replace = T),]
+  tree <- tree(length ~ rank + pctwhite + pctblack + pcthispanic, data = boot)
+  plot(tree, type="uniform", main="Tree")
+  text(tree)
+}
+```
+
+
+## Random Forest
+We chose to utilize a random forest for the same reasons as bagging, as it doesn't make any assumptions about our data. However, bagging is really hard to interpret, while random forests allow for feature importance. 
+
+We obtained an error rate of 0.81, and the specificity and sensitivity can be seen below. Our accuracy for the Random Forest was 0.19, slightly better than KNN but still low. The variable importance plot shows that rank is the most important feature, closely followed by the three races, mostly tied for importance in determining the length of a name.
+
+```{r randomforest, echo=FALSE}
+set.seed(70)
+test.data$length <- as.factor(test.data$length)
+rf <- randomForest(as.factor(length) ~ rank + pctwhite + pctblack + pcthispanic, data = training)
+rf.preds <- predict(rf, newdata = test.data)
+rf.err <- unname(1 - confusionMatrix(rf.preds, test.data[, 21])[3]$overall[1])
+
+confusionMatrix(rf.preds, test.data$length)
+```
+
+```{r}
+varImpPlot(rf)
+```
+
+
+
+# Final Modeling: Predicting length of name from race and rank
+In our modeling attempt, we chose to predict the length of the name as one of 9 different classes, 2-10 characters. However, this was very tricky for our models to do and not very useful as an application. We decided to group the names into three categories of lengths: short (2-5 characters), medium (6 characters), and long (7-10 characters). This breakdown is due to the high occurance of 5-7 length names. The groups are mostly even when we split them up this way. We ran all of our models again using these new groups, then we chose the best model out of the 5. 
+
+```{r, echo=FALSE}
+new.surnames400 <- surnames400
+new.surnames400$length <- as.double(new.surnames400$length)
+new.surnames400$length <- as.factor(ifelse(new.surnames400$length < 6, "S", ifelse(new.surnames400$length > 6, "L", "M")))
+
+set.seed(2332)
+n = 400
+split <- sample(1:n, size = n/2)
+new.training <- new.surnames400[split, ]
+new.test.data <- new.surnames400[-split, ]
+```
+
+## Logistic Regression: Multinomial
+As before, we can't use binomial regression because we have more than two classes (S, M, L). However, we decided to try multinomial regression instead.
+
+We obtained an error rate of 0.68, and the specificity and sensitivity can be seen in the confusion matrix below. Our accuracy for multinomial regression was 0.32, an improvement over the previous models. The plot shows that multinomial regression predicts that more of the names will be short instead of medium, so another model may work better for this.
+
+```{r, echo = FALSE}
+logit.names.new = multinom(as.factor(length) ~ rank + as.numeric(whiteProp) + as.numeric(blackProp) + as.numeric(hispProp), data= new.training)
+#summary(logit.names.new)
+logit.preds <- predict(logit.names.new, newdata = new.test.data[,-21], type = "class") # make predictions
+logit.new.err <- unname(1 - confusionMatrix(logit.preds, new.test.data[, 21])[3]$overall[1])
+
+confusionMatrix(logit.preds, as.factor(new.test.data[, 21])) # confusion matrix
+```
+
+
+```{r, echo=FALSE}
+plot(logit.preds, main="Counts of predicted values from KNN model", xlab="Length of name", ylab="Count")
+```
+
+
+## LDA
+We obtained an error rate of 0.65, and the specificity and sensitivity can be seen below. Our accuracy for LDA was 0.35, slightly higher than multinomial regression. The plot shows a similar story to the last one- LDA overpredicts the number of short length names.
+
+```{r lda2, echo=FALSE}
+lda.names.new <- lda(length ~ rank + whiteProp + blackProp + hispProp, data = new.training)
+lda.new.preds <- predict(lda.names.new, newdata = new.test.data[,-21])$class
+lda.new.err <- unname(1 - confusionMatrix(lda.new.preds, new.test.data[, 21])[3]$overall[1])
+confusionMatrix(lda.new.preds, as.factor(new.test.data[, 21]))
+```
+
+```{r, echo=FALSE}
+plot(lda.new.preds, main="Counts of predicted values from LDA model", xlab="Length of name", ylab="Count")
+```
+
+
+## KNN
+We obtained an error rate of 0.62, and the specificity and sensitivity can be seen below. Our accuracy for KNN was 0.38, higher than logistic regression and LDA. The plot shows that most of the points were grouped into one group, which is odd.
+
+```{r knn2, echo=FALSE}
+normalize <- function(x) {
+  return ((x - min(x)) / (max(x) - min(x))) 
+}
+
+new.names.knn <- as.data.frame(lapply(new.surnames400[c(18, 19, 20)], normalize))
+new.names.knn$length <- as.numeric(as.factor(new.surnames400$length))
+
+
+training.knn <- new.names.knn[1:200,]
+test.knn <- new.names.knn[201:400,]
+
+# decide the best k
+kmax = 100
+err = double(kmax)
+for(ii in 1:kmax){
+  pk = knn.cv(new.names.knn, new.names.knn$length, k=ii)
+  err[ii] = mean(pk != new.names.knn$length)
+}
+best.k <- max(which(err == min(err)))
+
+# pass the best k to the model
+new.knn.name = knn(training.knn, test = test.knn, cl = test.knn$length, k = best.k)
+knn2.err <- unname(1 - confusionMatrix(as.factor(new.knn.name), as.factor(test.knn[, 4]))[3]$overall[1])
+
+confusionMatrix(as.factor(new.knn.name), as.factor(test.knn[, 4]))
+```
+
+```{r, echo=FALSE}
+plot(new.knn.name, main="Counts of predicted values from KNN model", xlab="Length of name group", ylab="Count")
+```
+
+## Bagging
+This tree looks fairly similar to the tree in the previous section, so bagging wasn't particularly useful to us.
+
+
+```{r bagging2, eval=FALSE}
+set.seed(1)
+for(i in 1:B){
+  boot <- new.surnames400[sample(1:nrow(new.surnames400), replace = T),]
+  tree <- tree(as.factor(length) ~ rank + pctwhite + pctblack + pcthispanic, data = boot)
+  plot(tree, type="uniform", main="Tree")
+  text(tree)
+}
+```
+
+
+## Random Forest
+We obtained an error rate of 0.63, and the specificity and sensitivity are below. Our accuracy for random forest was 0.37, slightly lower than KNN. The feature importance graph shows that most of the variables have a similar level of importance.
+
+```{r randomforest2, echo=FALSE}
+set.seed(70)
+new.test.data$length <- as.factor(new.test.data$length)
+rf2 <- randomForest(as.factor(length) ~ rank + whiteProp + blackProp + hispProp, data = new.training)
+rf2.preds <- predict(rf2, newdata = new.test.data[,-21])
+confusionMatrix(rf2.preds, new.test.data$length)
+rf2.err <- unname(1 - confusionMatrix(rf2.preds, new.test.data$length)[3]$overall[1])
+```
+
+
+```{r, echo=FALSE}
+varImpPlot(rf2)
+```
+
+
+# Final Model
+We chose KNN as our final model because it had the highest accuracy rate of 38%. This is not very high, but considering the problem we tried to solve, it is decent. One con to this model is a lack of interpretability (and it grouped most of the predictions into one group, which was odd). A good runner-up would be the random forest, with an accuracy of 37%.
+
+# Conclusion
+
+There were many tributlations and dead ends we ran into while exploring this data set. We originally posed the hypothesis, 'How likely it is to guess the length of someone's name given their ethnicity or the commonality of their name?' Given certin constraints, we realized modification was necessary to continue with the scientifc process. Our alternate hypothesis posed was,'Do higher ranked names that are white tend to be shorter?' While this is a very rich data set, we faced many limitations. For example, we had a large list of +151,000 inidividual, unique oberserations. This made it difficult to perform tests and construct statistical models. 
+As an attempt to hurdle some of these ostables, we constructed a multinomial linear regression, which is a classification method that generalizes logistic regression to multiclass problems, i.e. with more than two possible discrete outcomes like that of a binomial family. This model was used to predict the probabilities of the different possible outcomes of a categorically distributed dependent variable (length), given a set of independent variables, which happened to be real/categorical-valued (racial proportions).
+Overall, we commenced our analysis in an optimistic spirit, eager to dive into this data and uncover something that wasn't already inspected and evaluated by the writers of FiveThirtyEight. To our dismay, while we were able to successfully produce and articulate 5 different models, none of them supported our modified hypothesis. With insigificant interpretations and low-grade accuracies, specificites, and sensitivities, we failed to deduce any definitive conclusions. That being said, we retracted our original thoughts inferring that overall we may not have the availability to determine the traditional race of a surname given it's length in characters. 
+This data, hwoever, served as an excellent set to preform exploratory analysis on. Reflecting on what we _were_ able to conclude, given an opportunity to redue this Data Annlysis Project, future questions to propose may be evaluating name comonality within different regions in the United States or even in an indiviual state, like Indiana.   
+
+
+

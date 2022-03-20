@@ -1,0 +1,394 @@
+---
+title: "Luke Bryan Spotify Analysis"
+author: "Amanda Suleski"
+date: "10/20/2019"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(spotifyr)
+library(graphics)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(MASS)
+library(gridExtra)
+library(BSDA)
+library(VGAM)
+library(coin)
+library(perm)
+library(np) 
+library(ggpubr)
+library(energy)
+library(scatterplot3d)
+library(plotly)
+library(survminer)
+library(KScorrect)
+library(datasets)
+library(maps)
+library(ggthemes)
+library(ggExtra)
+library(broom)
+library(boot)
+library(conover.test)
+
+theme_set(theme_bw())
+```
+
+
+```{r}
+Sys.setenv(SPOTIFY_CLIENT_ID = "b6eb08407bab41b4b3f8f5bb48a0f8f0")
+Sys.setenv(SPOTIFY_CLIENT_SECRET = "73efc29aa9b442fdbc83019dfc8fc0ed")
+access_token <- get_spotify_access_token()
+luke <-get_artist_audio_features("luke bryan")
+```
+
+Luke Bryan is a pop country artist. He has won numerous CMT awards, American Country Awards, Country Music Association Awards, and Billboard Music Awards in addition to being on both American Idol and The Voice. I am analyzing the danceability and valence in Luke Bryan's songs. Danceability describes how suitable a track is for dancing based on a combination of musical elements including tempo, rhythm stability, beat strength, and overall regularity. Valence describes the musical positiveness conveyed by a song. 
+  
+The nonparametric procedures that will be used are the Sign Test, Permutation Test, Wilcoxon Test, Kruskal Wallace Test, ANOVA, and the Conover Test. The Sign Test subtracts the null hypothesis median from each data point, then all we need to know about the differences is whether they are positive or negative. The test statistic is the number of positive signs. A sufficient assumption is that the observations are an iid sample. The test is considered nonparametric because no parametric distribution is assumed for the population. The Permutation Test assumes exchangeability; this means that every permutation of the two samples put together is equally likely. The Permutation Test takes two exchangeable samples and lists all possible combinations or simulates a large number of permutations for small sample sizes and large sample sizes respectively. For each permutation it compares the two permuted samples using a test statistic. The Wilcoxon-Mann-Whitney test is a nonparametric statistical test that compares two paired groups. The test essentially calculates the difference between each set of pairs and analyzes these differences. It can be used to test the null hypothesis that two populations have the same continuous distribution. The Kruskal Wallace Test, or one-way ANOVA on ranks, is a non-parametric method for testing whether samples originate from the same distribution. It is used for comparing two or more independent samples. ANOVA analyzes the differences among group means in a sample. This assumes normality and homoscedasticity of the data. The Conover Test is a method of performing pairwise comparisons between groups. It is a pairwise comparison procedure that is a better alternative to the Tukey procedure.
+
+```{r}
+summary(luke$danceability)
+ggplot(data = luke, aes(x = album_name, y = danceability)) + geom_boxplot() + xlab("Album Name") + scale_x_discrete(labels=c("Crash My Party" = "Crash My Party", "Doin' My Thing" = "Doin' My Thing", "I'll Stay Me" = "I'll Stay Me", "Kill The Lights" = "Kill The Lights", "Spring Break...Here To Party" = "Here To Party", "Spring Break...Checkin' Out" = "Checkin' Out", "Tailgates & Tanlines" = "Tailgates", "What Makes You Country" = "Makes You Country")) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = luke, aes(x = mode_name, y = danceability)) + geom_boxplot() + xlab("Musical Key") 
+qqnorm(luke$danceability)
+```
+
+
+For danceability, the median and mean are both slightly above 0.5 which means the majority of the songs are more danceable than not. The minimum and maximum tell us that no song is completely danceable or completely not danceable. The first boxplot shows that there are few outliers in the data. The biggest outlier is in the What Makes You Country album with danceability just above 0.25. Kill the Lights has two outliers at about 0.4 and 0.7 and Spring Break...Checkin' Out has an outlier just above 0.4. Most of the outliers have low danceability scores which means the majority of the songs are danceable with only 3 that are not very danceable. I'll Stay Me and Spring Break... Here to Party are the most danceable albums with the mean around 0.625. The rest of the albums have means which are all about 0.55. Danceability appears to have the same distribution for both major and minor songs. There is one outlier in the qqplot, but besides that the data is normal. This aligns with my opinions of Luke Bryan's music. Country music is usually not completely danceable, but I have definitely danced to most of his songs at barn dances.
+
+```{r}
+summary(luke$valence)
+ggplot(data = luke, aes(x = album_name, y = valence)) + geom_boxplot() + xlab("Album Name") + scale_x_discrete(labels=c("Crash My Party" = "Crash My Party", "Doin' My Thing" = "Doin' My Thing", "I'll Stay Me" = "I'll Stay Me", "Kill The Lights" = "Kill The Lights", "Spring Break...Here To Party" = "Here To Party", "Spring Break...Checkin' Out" = "Checkin' Out", "Tailgates & Tanlines" = "Tailgates", "What Makes You Country" = "Makes You Country")) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(data = luke, aes(x = mode_name, y = valence)) + geom_boxplot() + xlab("Musical Key")
+qqnorm(luke$valence)
+```
+
+For valence, the median and mean are both slightly above 0.5 which means the majority of the songs are more positive than negative. The minimum and maximum tell us that there is a wide variety of positivity and negativity in the songs. The first boxplot shows only two outliers from Crash My Party with a valence about 0.9 and from I'll Stay Me with a valence just above 0.1. Each album has a wide range in valence, Kill the Lights has the greatest range (about 0.25-0.9). I'll Stay Me, Spring Break...Checkin' Out, and Spring Break... Here to Party have the highest valence with means around 0.75. This aligns with my opinions of Luke Bryan's songs. The spring break albums I definitely view as positive and more of a party album. There is a wide range in Luke Bryan's songs, some of them are about fun stuff (hunting or drinking) while there are also a decent amount of negative songs (breakups or trucks breaking down). There appears to be about the same distribution for both major and minor songs, minor songs have a slightly smaller range in valence than major songs. The qq-plot is mostly linear. There is a slight S-shape, but the data appears mostly normal.
+
+
+```{r}
+SIGN.test(luke$danceability, md = 0.5, conf.level = 0.95)
+SIGN.test(luke$valence, md = 0.5, conf.level = 0.95)
+```
+
+I used the Sign Test to find confidence intervals for the medians of danceability and valence. The 96.58% confidence interval for the danceability median is 0.559-0.581. The p-value of 2.2e-16 means that there is strong evidence to reject the null hypothesis, concluding that the median is not 0.5. The 96.58% confidence interval for the valence median is 0.519-0.6080. The p-value of 0.008557 means that there is pretty strong evidence to reject the null hypothesis, not quite as strong as for danceability, but we can still reject the null hypothesis and conlude that the median is not 0.5. Both of these align with my views of Luke Bryan's music. Most of his songs use the same beat which makes sense for the smaller confidence interval because there is a smaller range for danceability. Valence has a larger range for the median which makes sense due to the wide variety of songs.
+
+
+```{r}
+diff.means = function(x, y) {
+  return(mean(x)- mean(y))
+}
+
+perm.diff.means = function(x, y) {
+  n1 =length(x)
+  n2 = length(y)
+  z = sample(c(x, y))
+  perm.x = z[1:n1]
+  perm.y = z[(n1+1):(n1+n2)]
+  return(diff.means(perm.x, perm.y))
+}
+
+perm.test.diff.means = function(x, y, nperm = 10000) {
+  test.stat = diff.means(x, y)
+  perm.dist = replicate(nperm,perm.diff.means(x, y))
+  return(sum(abs(perm.dist) >= abs(test.stat))/nperm)
+}
+
+majorD = luke$danceability[luke$mode_name == "major"]
+minorD = luke$danceability[luke$mode_name == "minor"]
+perm.test.diff.means(majorD, minorD)
+
+majorV = luke$valence[luke$mode_name == "major"]
+minorV = luke$valence[luke$mode_name == "minor"]
+perm.test.diff.means(majorV, minorV)
+```
+
+Here I am testing if the danceability and valence distributions are the same for major and minor songs. The permutation test gives a p-value of 0.8778 for danceability and a p-value of 0.6902 for valence. Both of these are not significant so we cannot reject the null hypothesis of danceability and valence having the same distributions for major and minor songs. 
+
+
+```{r}
+luke$mode_name <- as.factor(luke$mode_name)
+wilcox_test(luke$danceability ~ luke$mode_name, dist = "exact")
+wilcox_test(luke$valence ~ luke$mode_name, dist = "exact")
+```
+
+The Wilcoxon-Mann-Whitney Test produces the same results, which is good because it is consistent. For danceability, the p-value is 0.75 so we cannot reject the null hypothesis that major and minor songs have the same distribution. For valence, the p-value is 0.6943 so we cannot reject the null hypothesis that major and minor songs have the same distribution. There is a large difference in sample sizes, there are 114 major songs and only 26 minor songs. If there were a larger sample of minor songs, maybe we could notice a difference in distributions. 
+
+
+```{r}
+luke$album_name <- as.factor(luke$album_name)
+kruskal.test(danceability ~ album_name, data = luke)
+kruskal.test(valence ~ album_name, data = luke)
+```
+
+Now we will test if danceability and valence have the same distributions for each album. The Kruskal-Wallis test produces a p-value of 0.02912 for danceability. With an alpha of 0.05 we can reject the null hypothesis and conclude that there are different distributions for danceability across albums. Consideration of the p-value itself, 0.02912, indicates that we only have moderate evidence of this and we should probably perform another round of testing with a larger sample size (we could include his most recent album). The Kruskal-Wallis test produces a p-value of 1.076e-06 for valence. This gives strong evidence that we should reject the null hypothesis and conclude that there are different valence distributions across albums. 
+
+
+```{r}
+anova(lm(danceability~album_name, data = luke))
+anova(lm(valence~album_name, data = luke))
+```
+
+ANOVA produces about the same results as the Kruskal-Wallis test which is good for consistency. The p-value for danceability is 0.02185, which again shows weak evidence that we should reject the null hypothesis and conclude that there are different distributions for danceability across albums. The p-value for valence is 1.289e-07, which again shows strong evidence that we should reject the null hypothesis and conclude that there are different valence distributions across albums.
+
+These results make sense because certain albums like the spring break albums are much more of a party playlist (for spring break), so these albums will have more positive and danceable songs than albums like Doin' My Thing. Since there was such a wide range in valence for Luke Bryan's songs it makes sense that there is stronger evidence for different distributions across albums. Since there was a small range in danceability it makes sense that there is only weak evidence because all the songs, except for a few outliers, are within the same range. So we would expect only a small difference in distributions across albums.
+
+```{r}
+conover.test(luke$danceability, luke$album_name, method="bh", alpha = 0.1)
+```
+
+The conover test for danceability does not yield significant results. Certain albums such as Crash My Party and I'll Stay Me or Spring Break... Here to Party, Doing My Thing and Spring Break... Here to Party or Tailgates & Tanlines, I'll Stay Me and Spring Break...Checkin' Out or What Makes You Country, Spring Break...Here To Party and Spring Break...Checkin' Out or What Makes You Country produce p-values which are almost significant. However, we cannot reject the null hypothesis, that two albums have the same danceability distribution, for any of the album pairs.
+
+```{r}
+conover.test(luke$valence, luke$album_name, method="bh", alpha = 0.1)
+```
+
+The conover test for valence produces much more significant results. Mainly, Doin' My Thing and Tailgates & Tanlines produce significant p-values for almost every album. That means that these albums do not have the same distributions for valence compared to the other albums. This is expected because Doin' My Thing has more negative songs such as "Someone Else Calling You Baby" and other songs about breakups. Tailgates & Tanlines also has more negative songs than usual, but not quite as many as Doin' My Thing. On this album he has lots of songs referencing alcohol such as "You Don't Know Jack."
+
+
+```{r}
+luke$album_release_date[luke$album_name == "Crash My Party"] <- "2013-08-13"
+luke$album_release_date[luke$album_name == "Spring Break...Here To Party"] <- "2013-03-05"
+for (album in unique(luke$album_name)){
+  luke$meanDance[luke$album_name == album] <- mean(luke$danceability[luke$album_name == album])
+}
+ggplot(data = luke, aes(x = album_release_date, y = meanDance)) + geom_point() + ylab("Average Danceability") + xlab("Album Release Date") + geom_text(aes(label = luke$album_name), hjust=1, vjust=-1)
+
+for (album in unique(luke$album_name)){
+  luke$meanVal[luke$album_name == album] <- mean(luke$valence[luke$album_name == album])
+}
+ggplot(data = luke, aes(x = album_release_date, y = meanVal)) + geom_point() + ylab("Average Valence") + xlab("Album Release Date") + geom_text(aes(label = luke$album_name), hjust=1, vjust=0)
+```
+
+It appears that Luke Bryan's songs were slightly more danceable in the beginning of his career with the exception of the Doin' My Thing album. There is such a small range for danceability so there is no sufficient evidence for a strong trend in danceability across Luke Bryan's career. Again with valence, there is no sufficient evidence for a strong trend in valence across his career. From 2009-2011, he hit low points for valence with the average under 0.5 and then the valence is above 0.5 for the following years. 
+
+
+
+```{r}
+s <- cor(luke$danceability, luke$valence, method = "spearman", use = "complete.obs")
+k <- cor(luke$danceability, luke$valence, method = "kendall", use = "complete.obs")
+p <- cor(luke$danceability, luke$valence, method = "pearson", use = "complete.obs")
+
+c <- matrix(c(p,s,k),ncol=3,byrow=TRUE)
+colnames(c) <- c("Pearson","Spearman","Kendall")
+rownames(c) <- c("Correlation")
+as.table(c)
+```
+
+Pearson is a measure of the linear correlation between two variables; it is the ratio of the covariance of the variables to the product of their standard deviations. The Spearman correlation between two variables is equal to the Pearson correlation between the rank of the variables. It is better than Pearson's correlation coefficient when dealing with outliers and nonlinear data. The Kendall rank correlation is less sensitive to outliers. Spearman and Kendall coefficients are probably more accurate because Pearson assumes linearity. Pearson produced the highest correlation coefficient, followed by Spearman then Kendall.
+
+```{r}
+ggplot(data = luke, aes(x = valence, y = danceability)) + geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+The plot shows a slightly positive relationship between danceability and valence. "Out of Nowhere Girl" from the What Makes You Country album is a low leverage outlier with danceability just above 0.25. 
+
+\n
+
+\n
+
+The data was broken into groups by album to check if the correlation changes. As previously concluded, all Luke Bryan's albums have a small range in scores for danceability which can be explained by a relatively similar beat across albums. He has a much wider range in valence. This is accounted for by his wide variety of song topics which include trucks breaking down and break-ups in addition to hunting and fishing.
+
+```{r}
+alb <- c()
+for (a in unique(luke$album_name)) {
+  for (type in c("pearson", "spearman", "kendall")) {
+    alb <- c(alb, cor(luke$danceability[luke$album_name == a], luke$valence[luke$album_name == a], method = type, use = "complete.obs"))
+  }
+}
+
+alb <- matrix(alb, ncol=3, byrow=TRUE)
+colnames(alb) <- c("Pearson","Spearman","Kendall")
+rownames(alb) <- unique(luke$album_name)
+as.table(alb)
+```
+
+There is a wide range of correlation coefficients for valence and danceability across albums. The only negative coefficients are in the Spring Break...Checkin' Out album. I'll Stay Me has the strongest positive relationship between valence and danceability while Kill the Lights also has a strong positive relationship. 
+
+```{r}
+ggplot(data = luke, aes(x = valence, y = danceability, group = album_name, color = album_name)) + geom_smooth(method = lm, se = F) + labs(color = "Album Name")
+```
+
+The plot shows that Spring Break...Checkin' Out is the only negative relationship and Tailgates & Tanlines has the weakest positive relationship. Crash My Party and What Makes You Country, in addition to I'll Stay Me and Kill the Lights, have similar positive relationships.
+ 
+\n
+ 
+\n
+ 
+The data was also grouped into three year categories: Old songs (relased between 2007-2009), Mid songs (released between 2011-2013), and New songs (released between 2015-2017). This is to see if the relationships across albums are dependent on the date released. 
+
+```{r}
+luke <- transform(luke, year = ifelse(album_release_year == 2007 | album_release_year == 2009, "Old", ifelse(album_release_year == 2011 | album_release_year == 2013, "Mid", "New")))
+
+y <- c()
+for (a in c("Old", "Mid", "New")) {
+  for (type in c("pearson", "spearman", "kendall")) {
+    y <- c(y, cor(luke$danceability[luke$year == a], luke$valence[luke$year == a], method = type, use = "complete.obs"))
+  }
+}
+
+y <- matrix(y, ncol=3, byrow=TRUE)
+colnames(y) <- c("Pearson","Spearman","Kendall")
+rownames(y) <- c("2007-2009", "2011-2013", "2015-2017")
+as.table(y)
+```
+
+The older songs (years 2007-2009) have a much stronger positive correlation than the more recent songs. I'll Stay Me was the album with the strongest positive relationship and was released in 2007. The songs after 2009 have similar correlation coefficients. The largest difference in coefficients from 2011-2013 and 2015-2017 is from the Pearson correlation. This could be due to the "Out of Nowhere Girl" outlier from 2017.
+
+```{r}
+ggplot(data = luke, aes(x = valence, y = danceability, group = year, color = year)) + geom_smooth(method = lm, se = F) + geom_point() + labs(color = "Year")
+```
+
+As shown by the plot, the old songs have the strongest relationship and the mid and new songs have a similar relationship.
+
+\n
+\n
+
+This can be expected due to the wide variety in Luke Bryan's early music. In his first two albums, the songs range from a slower and sadder "Someone Else Calling You Baby" to an upbeat "Rain is a Good Thing." By the halfway point in his career, Luke Bryan has found the type of music he's best at and has remained around a pretty constant danceability, even with ranging valence, hence the weaker relationships.
+
+\n
+\n
+
+Bootstrapping is a method for approximating sampling distributions of estimators. Bootstrapping involves taking a random sample with replacement from the sample observations and calculating the statistic on the resampled data. Bootstrapping produces a consistent estimate of the standard error of estimators. It works when no parametric model is feasible or is tractable. However, it is based on random sampling so results will change a little bit every time and if you have a bad sample, your results will be bad.
+
+```{r}
+n = length(luke$valence)
+B = 10000
+spearman <- function(d, i=c(1:n)){
+  d2 <- d[i,]
+  return(cor(d2[1], d2[2], method = "spearman", use = "complete.obs"))
+}
+dat <- data.frame(cbind(luke$valence, luke$danceability))
+boot.dist = boot(data = dat, statistic = spearman, R = B)
+boot.ci(boot.dist, conf = 0.99)
+
+hist(boot.dist$t,main="Bootstrap Spearman Sample Correlation Coefficients")
+plot(ecdf(boot.dist$t),main="ECDF of Bootstrap Correlation Coefficients")
+
+xn1 <-rnorm(n)
+boots <-replicate(B, var(sample(xn1, size = n, replace = T)))
+sd(boots)
+```
+
+The bias-corrected and accelerated (BCA) bootstrap uses quantiles of the bootstrap distribution. For the entire dataset the 99% confidence interval for the spearman coefficient is (0.1254, 0.8522). The standard error is 0.26. This high error and wide confidence interval is not ideal... Maybe splitting the data into groups will produce better results.
+
+```{r}
+for (y in unique(luke$year)) {
+  n = sum(luke$year == y)
+  spearman <- function(d, i=c(1:n)){
+    d2 <- d[i,]
+    return(cor(d2[1], d2[2], method = "spearman", use = "complete.obs"))
+  }
+  dat <- data.frame(cbind(luke$valence[luke$year == y], luke$danceability[luke$year == y]))
+  boot.dist = boot(data = dat, statistic = spearman, R = B)
+  print(y)
+  print(boot.ci(boot.dist, conf = 0.99))
+  xn1 <-rnorm(n)
+  boots <-replicate(B, var(sample(xn1, size = n, replace = T)))
+  print(sd(boots))
+}
+```
+
+The songs from before 2011 have a 99% confidence interval of (0.1254, 0.8522) and standard error of 0.337. The songs from after 2013 have a 99% confidence interval of (-0.1019, 0.6285) and standard error of 0.2421686. The songs in between 2011-2013 have a confidence interval of (-0.0968, 0.5973) and standard error of 0.143. The songs in the middle of Luke Bryan's career have the smallest confidence interval and smallest standard error.
+
+```{r}
+luke.mdl <- lm(danceability ~ valence, data = luke)
+lm.pairs.boot = function(data, indices) {
+  newdata = data[indices, ]
+  # Return both coefficients
+  return(lm(newdata[, 2]~newdata[, 1])$coef)
+}
+boot.lm.dist = boot(cbind(luke$valence, luke$danceability), lm.pairs.boot,R = 10000)
+pointwise.luke = function(valence, alpha) {
+  estimate = luke.mdl$coef[1] + luke.mdl$coef[2]*valence
+  boot.preds = boot.lm.dist$t[, 1] + boot.lm.dist$t[, 2]*valence
+  return(2 * estimate - quantile(boot.preds, c(1-alpha/2, alpha/2)))
+}
+
+ed.grid = seq(0, 1, 0.01)
+prestige.grid = matrix(NA, nrow = length(ed.grid), ncol = 2)
+for(J in 1:length(ed.grid)) {
+  prestige.grid[J, ] = pointwise.luke(ed.grid[J], 0.01)
+}
+bands <- gather(data.frame(ed = ed.grid, lower = prestige.grid[, 1], upper = prestige.grid[,2]), key = "CI", value = "Bound", -1)
+ggplot(luke, aes(x = valence, y = danceability)) + geom_point() + geom_smooth(method = "lm",level = 0.99) + geom_line(data = bands, mapping = aes(x = ed, y = Bound, group = CI), color = 'red')
+```
+
+Notice how the upper bootstrap bound (red) deviates from the standard linear models band. It is slightly lower for low valence levels and slightly above the standard linear models band for high levels of valence.
+
+\n
+\n
+
+The univariate density plots are created using the Sheather-Jones bandwidth. The default is Gaussian; however, this is not good. Also "Unless told otherwise, just use density(x, bw = "SJ")" (from lecture notes).
+
+```{r}
+g = ggplot(luke, aes(x = valence, y = danceability)) + geom_point()
+ggMarginal(g, type = "density")
+```
+
+```{r}
+fhat.dance = density(luke$danceability, bw = "SJ", na.rm = TRUE)
+plot(fhat.dance, main = "Density of Danceability")
+ggplot(luke, aes(x = danceability)) + geom_histogram(aes(y = ..density..), binwidth = 0.04,
+color = "black", fill = "white") + ggtitle("Density Histogram of Danceability") + xlab("Danceability")
+```
+
+There is a high peak in danceability density between danceability values of 0.5-0.6. The density distribution for danceability is left-skewed. There is the one song which is an outlier with a danceability score of about 0.25. The density histogram resembles the density plot above. The binwidth is 0.04 in order to accurately capture the density curve. 
+
+```{r}
+fhat.val = density(luke$valence, bw = "SJ", na.rm = TRUE)
+plot(fhat.val, main = "Density of Valence")
+ggplot(luke, aes(x = valence)) + geom_histogram(aes(y = ..density..), binwidth = 0.07,
+color = "black", fill = "white") + ggtitle("Density Histogram of Valence") + xlab("Valence")
+```
+
+The density of valence is centered around 0.5 and almost resembles a normal curve. The density histogram resembles the density plot above. The binwidth is 0.07 in order to accurately capture the density curve without overfitting. 
+
+
+```{r}
+ggplot(luke, aes(x = valence, y = danceability))+ geom_density2d() + xlab("Valence")+ ylab("Danceability") + xlim(c(0.25, 0.75)) + ylim(c(0.4, 0.7))
+```
+
+One can see that most of the data is centered around 0.55 danceability and 0.45 valence. It is interesting to note that there is another dense location where danceability is about 0.65 and valence about 0.7. The bottom left corner's shape is probably due to the one outlier with a very low danceability.
+
+
+Conditional densities are found by
+$$
+\hat{f}_{Y|X}(y|x) = \frac{\hat{f}_{X,Y}(x,y)}{\hat{f}_X(x)}
+$$
+
+```{r}
+npc <- npcdens(danceability ~ valence, data = luke)
+grid <- expand.grid(valence = seq(0.3, 0.8, 0.02), danceability = seq(0.2, 0.7, 0.02))
+fhat <- predict(npc, newdata = grid)
+wireframe(fhat ~ grid$valence*grid$danceability, xlab = "Valence", ylab = "Danceability", zlab = "pdf")
+```
+
+Danceability appears to be consistent as valence increases. There is no clear trend from this plot. It is important to note that there is only one data point with a low valence; ideally there would be more low valence data points.
+
+
+```{r}
+mdl <- loess(danceability ~ valence, data = luke)
+mdl.aug <- augment(mdl)
+
+ggplot(mdl.aug, aes(x = valence, y = .fitted)) + geom_point() + ylab("Fitted Value")
+
+ggplot(mdl.aug, aes(x = .fitted, y = .resid)) + geom_point() + geom_smooth(method = lm, se = FALSE) + ggtitle("Residual Plot") + xlab("Fitted Value") + ylab("Residual")
+```
+
+As the valence increases, danceability tends to increase. There are relatively few data points with valence below 0.3, so the tail of the curve could potentially be overfitting. Danceability plateaus from valence values 0.4-0.6 with danceability about 0.58. Then there is a strong positive relationship between danceability and valence. The residuals are homoscedastic about 0 which is good for the model.
+
+\n
+
+\n
+
+Overall, the results found here align with my view of Luke Bryan as an artist. All his albums have a relatively similar beat which can explain the small range in scores for danceability. Country music is not known for its danceability; however, there are certain dances such as the two-step which are meant for country music. This explains the slightly above 0.5 danceability scores. Luke Bryan has a much wider range in valence. This is accounted for by his wide variety of song topics which include trucks breaking down and break-ups in addition to hunting and fishing. There is not a noticeable difference in distributions for major and minor songs. Part of this may be due to the limited number of minor songs. Danceability across Luke Bryan's albums is approximately the same, but valence varies greatly especially in the albums Doin' My Thing and Tailgates & Tanlines. 
+
+
+
+
+

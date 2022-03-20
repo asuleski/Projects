@@ -1,0 +1,190 @@
+---
+title: "Heart Disease"
+author: "Amanda Suleski"
+date: "4/21/2019"
+output: html_document
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+load("heart.RData")
+```
+
+
+This data set is from the UCI Machine Learning Data Repository in order to detect whether patients have heart disease. The data collected was age, sex, cp, trestbps, chol, fbs, restecg, thalach, exang, oldpeak, slope, ca, thal, and disease. cp is the chest pain experienced: asymptomatic (asymp), typical angina (angina), atypical angina (abang), and non-anginal pain (notang). Trestbps is the person's resting blood pressure (mm Hg on admission to the hospital). Chol is the person's cholesterol measurement in mg/dl. fbs is true if the patient's fasting blood sugar is greater than 120 mg/dl and false otherwise. Restecg is the resting electrocardiographic measurement: normal (norm), having ST-T wave abnormality (abn), and showing probable or definite left ventricular hypertrophy (hyp). Thalach is the person's maximum heart rate achieved during controlled exercise. Exang is true if exercise induces angina and false otherwise. Oldpeak is norm, abn, or hyper. The slope of the peak exercise ST segment is up if the slope is positive, flat if the slope is approximately 0, and down if the slope is negative. ca is the number of major vessels (0-3). Thal is the results from a thallium stress test: normal (norm), fixed defect (fixed), or reversable defect (rever). The disease indicates the absence or the type of heart disease present: disease (H) or heart disease (S1-S4). Heart disease can lead to serious medical issues or even death. The goal is to explore how these variables affect the probability of a patient having heart disease. 
+
+
+```{r}
+convert <- function(d){
+  for(i in col(d)){
+    if(typeof(d[[i]]) == "character"){
+      d[[i]] <- as.factor(d[[i]])
+    }
+  }
+  return(d)
+}
+
+disease <- c()
+for(x in heart$disease){
+      if(x == 'H'){
+    disease <- c(disease, 0)
+  } else{
+    disease <- c(disease, 1)
+  }
+}
+heart$disease <- disease
+
+heart <- convert(heart)
+
+heart$disease <- as.factor(heart$disease)
+
+# split data
+set.seed(2332)
+n = 303
+split <- sample(1:n, size = n/2)
+training <- heart[split, ]
+test.data <- heart[-split, ]
+```
+
+
+Exploratory Data Analysis
+
+```{r}
+library(ggplot2)
+
+summary(heart)
+boxplot(heart$age ~ heart$disease, main = "Age vs Heart Disease", xlab = "disease", ylab = "Age") 
+```
+
+Younger people are more likely to be healthy. The minimum age for people with heart disease is 35 compared to 29 for healthy people.
+
+
+```{r}
+ggplot(data = heart, aes(x = age, y = chol, group = disease, color = disease)) + geom_point() + geom_smooth(aes(color=disease)) + facet_wrap(vars(sex))
+```
+
+There is an outlier for a healthy female with cholesterol above 500. The cholesterol for healthy and diseased people is approximately the same.
+
+
+```{r}
+ggplot(data = heart, aes(x = age, y = trestbps, group = disease, color = disease)) + geom_point() + geom_smooth(aes(color = disease)) + facet_wrap(vars(sex))
+```
+
+The resting blood pressure is about the same in males with and without heart disease. The resting blood pressure for women is higher for women with heart disease than for women without heart disease. The resting blood pressure is about the same for males and females.
+
+
+```{r}
+ggplot(data = heart, aes(x = age, y = thalach, group = disease, color = disease)) + geom_point() + geom_smooth(aes(color = disease)) + facet_wrap(vars(sex))
+```
+
+Thalach is generally slighly higher in males than females. Thalach is lower for people with heart disease in both males and females.
+
+```{r}
+ggplot(data = heart, aes(x = age, y = thalach, group = cp, color = cp)) + geom_point() + geom_smooth(aes(color = cp)) + facet_wrap(vars(disease))
+```
+
+For people without heart disease, thalach is about the same for all cp groups. There is a difference in thalach for the cp groups with heart disease.
+
+
+```{r}
+ggplot(data = heart, aes(x = age, y = oldpeak, group = disease, color = disease)) + geom_point() + geom_smooth(aes(color = disease)) + facet_wrap(vars(sex))
+```
+
+Oldpeak is higher in people who have heart disease for both males and females.
+
+
+```{r}
+pairs(disease ~ ., data = heart)
+```
+
+I will not be using ca or restecg in the model due to the missing data and lack of effect. Thalac, age, cp, trestbps, and oldpeak are important variables for predicting heart disease. For people with heart disease, thalac is lower than  people without heart disease and trestbps, oldpeak, and age are higher than  people without heart disease.
+
+
+```{r}
+library(caret)
+library(e1071)
+#Logistic regression
+logistic_reg <- glm(disease ~ . -ca, data = training[, -7], family = "binomial")
+summary(logistic_reg)
+logreg.mdl <- predict(logistic_reg, newdata = test.data, type = "response")
+logreg.mdl <- (ifelse(logreg.mdl > .5, 1, 0))
+logreg.mdl <- as.factor(logreg.mdl)
+logreg.mdl.err <- unname(1 - confusionMatrix(logreg.mdl, test.data[, 14])[3]$overall[1])
+
+#LDA
+library(MASS)
+lda.fit <- lda(disease ~ .- ca - restecg, data = training)
+summary(lda.fit)
+lda.mdl <- predict(lda.fit, newdata = test.data[, -14])$class
+lda.mdl.err <- unname(1 - confusionMatrix(lda.mdl, test.data[, 14])[3]$overall[1])
+
+#KNN
+library(class)
+knndf <- cbind(training$age, training$trestbps, training$chol, training$thalach, training$oldpeak, training$ca, as.numeric(training$sex))
+knndf.test <- cbind(test.data$age, test.data$trestbps, test.data$chol, test.data$thalach, test.data$oldpeak, test.data$ca, as.numeric(test.data$sex))
+kmax = 100
+err = double(kmax)
+for(ii in 1:kmax){ # hw 5
+  pk = knn.cv(knndf, training$disease, k = ii)
+  err[ii] = mean(pk != training$disease)
+}
+best.k <- max(which(err == min(err)))
+ 
+knn.mdl <- knn(train = knndf, test = knndf.test, cl = training$disease, k = best.k)
+knn.mdl.err <- unname(1 - confusionMatrix(knn.mdl, test.data[, 14])[3]$overall[1])
+```
+knn deals with distance so only continuous numeric variables can be used. Thus only age, chol, thalach, oldpeak, and ca are numeric. Sex is a binary variable so we can also use it as numeric.
+
+
+Bagging
+```{r}
+library(randomForest)
+bag = randomForest(disease ~ . -ca -restecg, data = training, mtry = ncol(training)-3)
+varImpPlot(bag)
+summary(bag)
+bag.mdl <- predict(bag, newdata = test.data[, -14])
+bag.mdl.err <- unname(1 - confusionMatrix(bag.mdl, test.data[, 14])[3]$overall[1])
+```
+
+Random Forest
+```{r}
+rf = randomForest(disease ~ . -ca -restecg, data = training)
+varImpPlot(rf)
+summary(rf)
+rf.mdl <- predict(rf, newdata = test.data[, -14])
+rf.mdl.err <- unname(1 - confusionMatrix(rf.mdl, test.data[, 14])[3]$overall[1])
+```
+
+
+```{r}
+min.err <- min(c(logreg.mdl.err, lda.mdl.err, knn.mdl.err, bag.mdl.err, rf.mdl.err))
+final_model <- lda.mdl
+```
+
+The final model is the LDA model because it has the smallest error.
+
+
+```{r}
+confusionMatrix(final_model, test.data[, 14])
+```
+
+Error Rate
+```{r}
+lda.mdl.err
+```
+
+
+```{r}
+disease_predict <- function(mdl, df){
+  mdl <- predict(mdl, newdata = df[, -14])$class
+  mdl.err <- unname(1 - confusionMatrix(mdl, df[, 14])[3]$overall[1])
+  mdl.err
+}
+
+disease_predict(lda.fit, test.data)
+```
+

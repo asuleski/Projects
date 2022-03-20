@@ -1,0 +1,217 @@
+---
+title: "Income Mobility"
+author: "Amanda Suleski"
+date: "12/8/2019"
+output: html_document
+---
+
+The data set used for analysis is “Where is the Land of Opportunity? The Geography of Intergenerational Mobility in the United States,” from the Quarterly Journal of Economics. The dataset has information on 741 communities. We will be analyzing the mobility, or the probability that a child born in 1980–1982 into the lowest quintile (20%) of household income will be in the top quintile at age 30. People are assigned to the community they grew up in, not the one they were in as adults. The dataset includes a total of 43 different variables/possible predictors. This is important information for people in poverty; they should live somewhere that has a high mobility. Learning and analyzing what makes for high levels of mobility will allow cities with low mobility to improve and provide more opportunities to change.
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(graphics)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(MASS)
+library(gridExtra) # for grid.arrange(), grids of plots in ggplot without facet_grid
+library(BSDA) # For SIGN.test()
+library(VGAM) # For logistic distribution
+library(coin)
+library(perm)
+library(np) 
+library(ggpubr) #for stat_cor function which adds correlation coefficient to ggplot
+library(energy) # distance correlation function and t-test in here
+library(scatterplot3d) # for easy/boring scatterplots that work in PDF knit
+library(plotly) # Great graphs! Frustrating syntax!
+library(survminer) # Survival Analysis
+library(KScorrect) # KS test function for estimated parameters.
+library(datasets)
+library(maps)
+library(ggthemes)
+library(ggExtra)
+library(broom)
+
+theme_set(theme_bw())
+```
+
+
+```{r}
+# separate dataframe for quantitative variables only
+dat <- read.csv("mobility.csv")
+quant.dat <- dat[, -c(2,4)]
+```
+
+```{r}
+dat2 <- dat[!(as.character(dat$State) == "HI" | as.character(dat$State) == "AK") & !is.na(dat$Mobility),]
+states <- map_data("state")
+ggplot(data = dat2, aes(x = Longitude, y = Latitude, color = Mobility)) + geom_point(aes(size = Population)) + scale_color_gradient(low="blue", high="red") + geom_polygon(data = states, mapping = aes(long, lat, group = group), fill = NA, color = "black", size = 0.2) + coord_map() + theme_map()
+```
+
+This map shows the mobility of each community by color and the population of that community by size. The more populated communities tend to have low mobility, 0-0.2. Smaller communities in the central north U.S. have the highest mobility. It is also interesting to note that there is a much larger sample size of communities on the east half of the U.S. compared to the west.
+
+```{r}
+abbr <- data.frame(cbind(state.abb, tolower(state.name)))
+colnames(abbr)[2] <- "region"
+states <- left_join(states, abbr, by = "region")
+avDat = data.frame()
+for (s in unique(dat2$State)) {
+  newRow <- data.frame(s, weighted.mean(dat2$Mobility[dat2$State == s], dat2$Population[dat2$State == s]))
+  avDat <- rbind(avDat, newRow)
+}
+colnames(avDat) <- c("state.abb", "avMobility")
+avDat <- left_join(avDat, states, by = "state.abb")
+ggplot(data = avDat, aes(x = long, y = lat))  + scale_fill_gradient(low="blue", high="red") + geom_polygon(mapping = aes(group = group, fill = avMobility), color = "black", size = 0.2) + coord_map() + theme_map() + ggtitle("Average Mobility Weighted by Population") + labs(fill = "Average Mobility")
+```
+
+This map shows the average mobility for each state. The averaged mobility is calculated using a mean which is weighted by the population of each community. Clearly the south east has very low levels of mobility compared to the central north U.S. The mobility increases as you move north and west from the south east. South Carolina has the lowest mobility, 0.04 while Wyoming and North Dakota have mobilities of 0.16 and 0.19 respectively.
+
+\n
+
+Correlation is analysis that measures the relationship between two variables and produces a value between -1 and 1. A value of ± 1 indicates a perfect degree of association between the two variables.
+
+```{r, eval=FALSE}
+cor(quant.dat$Seg_income, quant.dat$Seg_affluence, method = "spearman", use = "complete.obs")
+cor(quant.dat$Seg_income, quant.dat$Seg_poverty, method = "spearman", use = "complete.obs")
+cor(quant.dat$Seg_affluence, quant.dat$Seg_poverty, method = "spearman", use = "complete.obs")
+
+cor(quant.dat$Middle_class, quant.dat$Gini, method = "spearman", use = "complete.obs")
+cor(quant.dat$Middle_class, quant.dat$Gini_99, method = "spearman", use = "complete.obs")
+cor(quant.dat$Teenage_labor, quant.dat$Gini_99, method = "spearman", use = "complete.obs")
+```
+
+Aside from mobility, some of the variables are related to eachother. The strongest positive relationships are between income segregation (a measure of residential segregation by income), segregation of poverty (a measure of residential segregation for those in the bottom quarter of the national income distribution), and segregation of affluence (Residential segregation for those in the top qarter). The Spearman correlation coefficient for income segregation and segregation of affluence is 0.984. The Spearman correlation coefficient for income segregation and segregation of poverty is 0.980. The Spearman correlation coefficient for segregation of affluence and segregation of poverty is 0.940. It is expected that these are all related because they are all financial variables.
+
+\n
+
+The strongest negative relationships are fraction of middle class (fraction of parents whose income is between the national 25th and 75th percentiles) with Gini (a measure of income inequality, which would be 0 if all incomes were perfectly equal, and tends towards 100 as all the income is concentrated among the richest individuals) and Gini bottom 99% (Gini coefficient among the lower 99% of that community) and teenage labor (fraction of those age 14–16 who were in the labor force) with Gini bottom 99%. The Spearman correlation coefficient for middle class and Gini is -0.794 and the coefficient for middle class and Gini bottom 99% is -0.816. This can be expected because the more people in the same class (middle class) means more people in the same income range; thus the Gini coefficients will be closer to 0. The Spearman correlation coefficient for teenage labor and Gini bottom 99% is -0.728. Similarly, the teenage labor fraction (except for the top 1% because they usually do not need to work) relates to the number of people in the same income range; hence the negative correlation with Gini bottom 99%.
+
+
+```{r}
+cor(quant.dat$Mobility, quant.dat, method = "pearson", use = "complete.obs")
+```
+
+Pearson is a measure of the linear correlation between two variables; it is the ratio of the covariance of the variables to the product of their standard deviations.
+
+```{r}
+cor(quant.dat$Mobility, quant.dat, method = "kendall", use = "complete.obs")
+```
+
+Kendall rank correlation is less sensitive to outliers.
+
+```{r}
+cor(quant.dat$Mobility, quant.dat, method = "spearman", use = "complete.obs")
+```
+
+The Spearman correlation between two variables is equal to the Pearson correlation between the rank of the variables. It is better than Pearson's correlation coefficient when dealing with outliers and nonlinear data.
+
+\n
+
+All three correlation methods provide similar results for correlations to mobility. Pearson and Spearman correlation coefficients are very close which means there probably aren't many, if any, outliers in the data. The Kendall correlation coefficients tend to be closer to zero, as the range is [-0.57, 0.52] compared to the range of the pearson and spearman correlation coefficients which are [-0.67, 0.67] and [-0.75, 0.71] respectively. Spearman and Kendall coefficients are probably more accurate because Pearson assumes linearity so it is not appropriate for most variables.
+
+\n
+
+The strongest negative relationships with mobility are black (percentage of individuals who marked black, and nothing else, on census forms) and single motherhood (the number of single female households with children divided by the total number of households with children). This was anticipated because of the racial inequality in the U.S. Black people often have fewer opportunities to move up in class. Additionally, single mothers often have fewer opportunities because they have to care for dependents. Migration out (migration out of the community to elsewhere, as a fraction of 2000 population) and foreign born (fraction of residents born outside the US) have weakest relationships with mobility. The lack of relationship with migration out is surprising. A negative relationship was expected because most people leave a community to pursue new opportunities. Similarly, people born outside the U.S. would be expected to have lower mobility due to obstacles like the language barrier. Commute (fraction of workers with a commute of less than 15 minutes) and middle class (fraction of parents whose income is between the national 25th and 75th percentiles) have the strongest positive relationship with mobility. This can be expected because a short commute means there are more opportunities closer to home. Having a large middle class population means that people could be in the process of moving from lower classes to higher classes; hence a greater mobility.
+
+\n
+
+The two variables which will be used as predictors are middle class and single motherhood. Middle class is the bridge between the lowest quintile and the top quintile. If lots of people are moving through the middle class, a city has high mobility. Middle class has the strongest positive correlation with mobility. Single motherhood is a barrier to overcome in order to have mobility. Children are a financial burden which can hinder mobility. Single motherhood has the strongest negative correlation with mobility.
+
+```{r}
+fhat.mob = density(dat$Mobility, bw = "SJ", na.rm = TRUE)
+plot(fhat.mob, main = "Density of Mobility")
+fhat.mc = density(dat$Middle_class, bw = "SJ", na.rm = TRUE)
+plot(fhat.mc, main = "Density of Middle Class")
+fhat.sm = density(dat$Single_mothers, bw = "SJ", na.rm = TRUE)
+plot(fhat.sm, main = "Density of Single Motherhood")
+```
+
+The univariate density plots are created using the Sheather-Jones bandwidth. The density distribution for mobility is right-skewed with the majority of values being slightly less than 0.1. This means that on average fewer than 1 in 10 people in a community are able to move from the lowest quintile to the highest quintile; however, there are some rare communities that have mobilities up to 0.5. The density of middle class is slightly left-skewed and centered about 0.55. 55% of families earn income that is between the 25th and 75th percentiles. This is expected because the majority of the population in a community should be in the middle class rather than wealthy or poor communities, but should not consist of only one class. The density of single motherhood has as more concentrated peak around 0.2 and is slightly right-skewed. This means that in most communities 1 out of 5 families are families with a single mother. 
+
+```{r}
+ggplot(dat, aes(x = Middle_class)) + geom_histogram(aes(y = ..density..), binwidth = 0.02,
+color = "black", fill = "white") + ggtitle("Density Histogram of Middle Class") + xlab("Middle Class")
+ggplot(dat, aes(x = Single_mothers)) + geom_histogram(aes(y = ..density..), binwidth = 0.01,
+color = "black", fill = "white") + ggtitle("Density Histogram of Single Motherhood") + xlab("Single Motherhood")
+```
+
+The density histograms resemble the density plots above. The binwidth is 0.02 for middle class and 0.01 for single motherhood in order to accurately capture the density curve. 
+
+The empirical CDF is a step function which estimates the CDF.
+$$
+\hat{F}_n(x) = \frac{1}{n}\sum_{i=1}^n I(X_i \le x)
+$$
+
+```{r}
+ggplot(dat, aes(Mobility)) + stat_ecdf(geom = "step", color = "red") + ylab("F(x)") + ggtitle("ECDF of Mobility")
+ggplot(dat, aes(Middle_class)) + stat_ecdf(geom = "step", color = "red") + ylab("F(x)") + ggtitle("ECDF of Middle Class") + xlab("Middle Class")
+ggplot(dat, aes(Single_mothers)) + stat_ecdf(geom = "step", color = "red") + ylab("F(x)") + ggtitle("ECDF of Single Motherhood") + xlab("Single Motherhood")
+```
+
+The ECDF for mobility shows that about 90% of communities sampled have mobility scores of less than 0.2. The steepest slope on the graph is at about 0.1 which corresponds to the most communities having a 0.1 mobility score. The ECDF for middle class almost resembles the CDF of a normal distribution with a slightly longer left tail. This relates to the majority of communities having slightly over half of their population in the middle class. There are very few communities with less than half the population in the middle class or more than 70% the population in the middle class. The ECDF of single motherhood shows a large right tail to the density which corresponds to few very communities having over 30% of families with single mothers. The steepest slope is around 0.2 which means the most communities have single mothers in about 20% of families.
+
+\n
+
+Conditional densities are found by
+$$
+\hat{f}_{Y|X}(y|x) = \frac{\hat{f}_{X,Y}(x,y)}{\hat{f}_X(x)}
+$$
+
+```{r np.messages=FALSE}
+npc <- npcdens(Mobility ~ Middle_class, data = dat)
+grid <- expand.grid(Middle_class = seq(0.3, 0.7, 0.01), Mobility = seq(0, 0.4, 0.01))
+fhat <- predict(npc, newdata = grid)
+wireframe(fhat ~ grid$Mobility*grid$Middle_class, xlab = "Mobility", ylab = "Middle Class", zlab = "pdf")
+```
+
+The conditional density plot of mobility and middle class shows the majority of communities with a low mobility and about half the population in the middle class. The plot shows a wider variance in mobility when less of the population is in the middle class compared to when virtually all of the population is in the middle class. This could be due to there being more variety in social class when less of the population is in the middle class.
+
+```{r np.messages=FALSE}
+npc <- npcdens(Mobility ~ Single_mothers, data = dat)
+grid <- expand.grid(Single_mothers = seq(0.05, 0.45, 0.01), Mobility = seq(0, 0.4, 0.01))
+fhat <- predict(npc, newdata = grid)
+
+wireframe(fhat ~ grid$Mobility*grid$Single_mothers, xlab = "Mobility", ylab = "Single Mothers", zlab = "pdf")
+```
+
+The conditional density plot of mobility with single motherhood shows a fairly strong relationship. As the percentage of single motherhood decreases, the mobility increases. It is interesting that the majority of communities sampled have a high percentage of single mothers and low mobility.
+
+\n
+
+A loess model was created to predict mobility from the middle class and single motherhood percentages.
+
+```{r}
+mdl <- loess(Mobility ~ Middle_class + Single_mothers, data = dat)
+
+# God bless this code was given, Ch 8 Notes
+loessPlot3D <-function(fit, neval = 100, plotly = T, angle = 60) { 
+  library(lattice)
+  library(plotly)
+  x1 <-seq(min(fit$x[, 1], na.rm = T)- sd(fit$x[, 1], na.rm = T),max(fit$x[,1], na.rm = T)+ sd(fit$x[, 1], na.rm = T), length.out = 100)
+  x2 <-seq(min(fit$x[, 2], na.rm = T)- sd(fit$x[, 2], na.rm = T),max(fit$x[,2], na.rm = T)+ sd(fit$x[, 2], na.rm = T), length.out = 100)
+  grid <-expand.grid(x1, x2)
+  names(grid) <- fit$xnames
+  ghat <-predict(fit, newdata = grid)
+  
+  if(plotly) {
+    fhat =matrix(ghat, byrow = T, ncol =length(x))
+    p <-plot_ly(x = x2, y = x1, z = ghat)%>% layout(scene =list(xaxis =list(title = fit$xnames[2]),yaxis =list(title = fit$xnames[1]), zaxis =list(title = fit$ynames)))%>%add_surface()%>% add_markers(x = fit$x[, 2], y = fit$x[, 1], z = fit$y,color =I("black"), size =I(30))
+  } else if(!plotly) {
+      p <-wireframe(ghat~grid[, 1]*grid[, 2], xlab = fit$xnames[1], ylab = fit$xnames[2], zlab = "Mobility", screen =list(z = angle, x = -60, y = 0), scales = list(arrows = F, distance = c(0.5, 0.5, 0.5), cex=1,col="black")) 
+  } else return("Set plotly to T or F")
+  return(p)
+  }
+
+loessPlot3D(mdl, plotly = F)
+
+mdl.aug <- augment(mdl)
+ggplot(mdl.aug, aes(x = .fitted, y = .resid)) + geom_point() + geom_smooth(method = lm, se = FALSE) + ggtitle("Residual Plot") + xlab("Fitted Value") + ylab("Residual")
+```
+
+A loess model is a nonparametric model which fits the curve empirically using a quadratic local regression. Mobility decreases as single motherhood percentage increases and the middle class fraction is smallest. This probably relates to the communities in poverty. Mobility increases as middle class increases and single motherhood is close to zero. The interesting part of this plot is that mobility is highest when the fraction of single motherhood and middle class are large. With close to 80% of the population in the middle class and 40% of families with a single mother mobility reaches a peak of 0.6. This could be due to there being few samples with mobilities greater than 0.2. As shown by the ECDFs above, about 90% of the communities from the data have mobilities less than 0.2 and about 90% of the sampled communities have single motherhood percentages of less than 0.3. This model probably overfitted where single motherhood and middle class are large due to the small number of data points. The residual plot is not perfect but is mostly centered at 0. There are a few outliers with residuals around 0.2, but these are low leverage points.
+
+\n
+
+The majority of communities have low mobility levels, especially in the south east US. Single motherhood has a strong negative relationship with mobility and fraction of middle class has a positive relationship with mobility. It is surprising for the mobility to be much higher in the north central US because most people would think that there is high mobility in big cities with more opportunities. This could be due to the lower cost of living which makes it easier to escape poverty. It is also surprising that the model predicted mobility to be highest when the fraction of single motherhood and middle class are large. This has to be interpreted with caution due to the small amount of data points with mobilities above 0.2.
+

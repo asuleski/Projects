@@ -1,0 +1,484 @@
+---
+title: "Project Report"
+author: "Amanda Suleski, Zijia Cao, and Jingyu Xie"
+date: "11/29/2018"
+output: html_document
+---
+
+Introduction:
+
+It is common for children diagnosed with a developmental disorder to show signs of motor functioning impairment as well. Various studies have concluded different results; some say both children with ADHD or Autism show signs of impairment while others believe only children diagnosed with Autism show impairment. The specificity of these motor impairments is ambiguous within different groups of children. This study aims to analyze this evidence for motor impairments in children diagnosed with ADHD (attention deficit/ hyperactivity disorder), ASD (autism spectrum), and typically developing children. Children completed the Movement Assessment Battery for Children (mABC) to assess motor functioning. The test involves different motor tasks: Manual Dexterity, Aiming and Catching, and Balance. The motor tasks increased difficulty based on age; one assessment was for ages 7-10 and another assessment for ages 11-16. The social deficits were measured using the social responsiveness scale (SRS), which was filled out by the parents. This examines the motivation to engage in social interactions, ability to recognize and interpret social cues, and to respond appropriately. Intelligence was measured using the fourth and fifth versions of the Wechsler Intelligence Scale for Children (WISC). Children perform a series of tasks including general knowledge, block patters, word similarities, vocabulary, and picture concepts. In order to participate in the study, children needed to have an IQ above 80. Children's primary and secondary diagnosis, age, gender, and intelligence will be studied. Autism is a mental deficit characterized by difficulty in communicating and forming relationships with other people and in using language and abstract concepts (WebMD). ADHD is a chronic condition marked by persistent inattention, hyperactivity, and sometimes impulsivity. The subtypes of ADHD are inattentive and hyperactive/impulsive, or both (WebMD). This study aims to evaluate the affect on the relationship between motor skills and social responsiveness in children who are diagnosed with Autism and ADHD compared to typically developing children, and the changes in the relationship due to age, gender, intelligence, or medications.
+
+Research Question: 
+  Is there an affect on the relationship between motor skills and social responsiveness in children who are diagnosed with Autism and ADHD compared to typically developing children? Does age, gender, intelligence, or medications affect this relationship?
+  
+
+Methods:
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+library(dplyr)
+library(ggplot2)
+
+Demo_Dat <- read.csv("KKI_demographicInfo.csv")
+Hand_Dat <- read.csv("KKI_handedness.csv")
+mABC_Dat <- read.csv("KKI_movementAssessmentBatteryforChildren.csv")
+SRS_Dat <- read.csv("KKI_SocialResponsivenessScaleQuestionnaire.csv")
+WISC_Dat <- read.csv("KKI_WechslerIntelligenceScaleforChildren.csv")
+WISC4_Dat <- read.csv("wisc4GAI_lookup.csv")
+WISC5_Dat <- read.csv("wisc5GAI_lookup.csv")
+
+```
+
+Data Cleaning:
+
+Data used is children aged 8-12 on their first visit. Ages 8-12 are used so there is a large enough population in each primary diagnosis. The first visit is being studied for each child to preserve independence in the data set.
+
+
+
+Table 1
+```{r}
+Data <- inner_join(Demo_Dat, mABC_Dat, by = "ID")
+Data <- Data %>%
+  group_by(PrimaryDiagnosis)
+Data <- Data %>% 
+  filter(visit == 1, mABC_AGE >= 8, mABC_AGE <= 12, !is.na(mABC_AGE))
+
+WISC_Dat$WISC4.ScaledSum <- (WISC_Dat$WISC4_Vocabulary + WISC_Dat$WISC4_Information + WISC_Dat$WISC4_Similarities + WISC_Dat$WISC4_BlockDesign + WISC_Dat$WISC4_MatrixReasoning)
+WISC_Dat <- inner_join(WISC_Dat, WISC4_Dat, by = "WISC4.ScaledSum")
+WISC_Dat$WISC5.ScaledSum <- (WISC_Dat$WISC5_Vocabulary + WISC_Dat$WISC5_FigureWeights + WISC_Dat$WISC5_Similarities + WISC_Dat$WISC5_BlockDesign + WISC_Dat$WISC5_MatrixReasoning)
+WISC_Dat <- inner_join(WISC_Dat, WISC5_Dat, by = "WISC5.ScaledSum")
+Dat4 <- inner_join(Data, WISC_Dat, by = "ID")
+Dat4a <- Dat4 %>%
+  filter(!is.na(WISC4.GAI))
+Dat4b <- Dat4 %>%
+  filter(!is.na(WISC5.GAI))
+
+G <- count(Data, Gender)
+Am <- tapply(Data$mABC_AGE, Data$PrimaryDiagnosis, mean)
+Asd <- tapply(Data$mABC_AGE, Data$PrimaryDiagnosis, sd)
+I4m <- tapply(Dat4a$WISC4.GAI, Dat4a$PrimaryDiagnosis, mean)
+I4sd <- tapply(Dat4a$WISC4.GAI, Dat4a$PrimaryDiagnosis, sd)
+I5m <- tapply(Dat4b$WISC5.GAI, Dat4b$PrimaryDiagnosis, mean)
+I5sd <- tapply(Dat4b$WISC5.GAI, Dat4b$PrimaryDiagnosis, sd)
+x <- matrix(c(94, 25, 105, 233, 126, 249, Am, Asd, I4m, I4sd, I5m, I5sd), ncol=3, byrow=T)
+colnames(x) <- c("ADHD", "ASD", "TD")
+rownames(x) <- c("Female", "Male", "Average Age", "Age Standard Deviation", "Average WISC 4", "WISC 4 Standard Deviation", "Average WISC 5", "WISC 5 Standard Deviation")
+x
+```
+
+Observations:
+
+Age, Gender, and Intelligence were not significantly different in the diagnosis groups.
+
+
+mABC Total Score and SRS Total Raw Score Relationship
+```{r}
+Dat <- inner_join(SRS_Dat, mABC_Dat, by = "ID")
+Dat <- inner_join(Demo_Dat, Dat, by = "ID")
+Dat1 <- Dat %>% 
+  filter(visit.x == 1, mABC_AGE >= 8, mABC_AGE <= 12, !is.na(mABC_AGE))
+
+ggplot(Dat1, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore)) + geom_point() + geom_smooth() + facet_wrap(vars(PrimaryDiagnosis))
+```
+
+Observations:
+
+Children diagnosed with autism have significantly lower Total Motor Scores than children diagnosed with ADHD and typically developing children. Typically developing children have highest average Total Motor Scores Scores. Children diagnosed with autism has significantly higher Social Responsiveness Scores than children diagnosed with ADHD and typically developing children. Typically developing children have an almost constant linear relationship between Social Responsiveness Scores and Total Motor Scores. There are more outliers and higher residuals in children diagnosed with Autism. There is a somewhat negative linear correlation in the relationship for children diagnosed with ADHD.
+
+
+Motor Score Relationship with Age
+
+```{r}
+ggplot(data = Dat1, aes(x = mABC_AGE, y = mABC_TotalStandardScore)) + geom_point() + geom_smooth(method='lm', se=FALSE, color='red') + geom_smooth(method='loess') + facet_wrap(vars(PrimaryDiagnosis))
+```
+
+Observations:
+
+The mABC Total Standard Score increases with age for all primary diagnosis. Typically developing children have the strongest positive linear correlation and highest scores. Children diagnosed with ADHD have a similar positive correlation compared to typically developing children, but with lower total scores. Children diagnosed with Autism have the weakest positive linear correlation and lowest total scores.
+
+
+Spline Model
+```{r}
+Dat <- inner_join(SRS_Dat, mABC_Dat, by = "ID")
+Dat <- inner_join(Demo_Dat, Dat, by = "ID")
+Dat1 <- Dat %>% 
+  filter(visit.x == 1, mABC_AGE >= 8, mABC_AGE <= 12, !is.na(mABC_AGE))
+
+x <- Dat1$mABC_AGE
+y <- Dat1$SRS_TotalRawScore
+Dat1$x_sp <- x-10
+Dat1$x_sp[x < 10] <- 0
+
+fit_sp <- lm(y ~ x + x_sp, data = Dat1)
+Dat1$fitted <- predict(fit_sp, newdata = Dat1)
+ggplot(Dat1, aes(x, y)) + geom_point() + geom_smooth() + geom_line(aes(y=fitted), color='red') + xlab('Age') + ylab('SRS Total Raw Score') 
+```
+
+Observations:
+
+Between ages 8 and 10, there seems to be a negative relationship between age and SRS total raw score. After age 10 there seems to be a positive relationship between age and SRS total raw score. Thus a spline model was made with a knot placed at age 10.
+
+
+Relationship with Gender
+```{r}
+ggplot(Dat1, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore, group=Gender, color=Gender)) + geom_point() + geom_smooth(aes(color=Gender)) + facet_wrap(vars(PrimaryDiagnosis))
+```
+
+Observations:
+
+There is a larger male sample size. Females tend to have a stronger negative correlation of SRS Total Raw Score and mABC Total Standard Score. Typically developing females have the strongest negative correlation. Children diagnosed with Autism have a very similar relationship between SRS Total Raw Score and mABC Total Standard Score for males and females.
+
+
+Interaction between age and motor skills
+```{r}
+ggplot(Dat1, aes(x = mABC_AGE, y = SRS_TotalRawScore)) + geom_point() + geom_smooth(aes(color=Gender)) + facet_wrap(vars(PrimaryDiagnosis))
+```
+
+Observations:
+
+No interaction term is needed for age and gender because there are similar slopes for both genders across the three diagnoses.
+
+
+Relationship with Medication
+```{r}
+Dat2 <- Dat1 %>% 
+  filter(visit.x == 1, mABC_AGE >= 8, mABC_AGE <= 12, !is.na(CurrentlyNotTakingMeds))
+
+ggplot(Dat2, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore, group=CurrentlyNotTakingMeds, color=CurrentlyNotTakingMeds)) + geom_point() + geom_smooth(aes(color=CurrentlyNotTakingMeds)) + facet_wrap(vars(PrimaryDiagnosis)) 
+```
+
+Observations:
+
+For children diagnosed with Autism, the social responsiveness total scores are slightly higher in children currently taking medication. Compared to the diagnosis group, medicine has higher influence on typically children improving the motor skills. For children diagnosed with ADHD, there is a stronger negative correlation between social responsiveness total scores and mABC total standard score in children not currently taking medication.
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to Medications
+```{r}
+fit2 <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat2)
+Dat2$yhat <- predict(fit2, newdata = Dat2)
+Dat2$resid <- Dat2$SRS_TotalRawScore - Dat2$yhat
+
+boxplot(resid~CurrentlyNotTakingMeds, data = Dat2, main = "Residual Plot", xlab = "Currently Not Taking Medication", ylab = "Residual")
+```
+
+Observations:
+
+Both box plots for children currently taking medication and children not taking medication are about the same. The medians of the residuals are both approximately 0. Medication should not be included in our model; it does not have an effect on the relationship between social responsiveness and motor functioning.
+
+
+mABC Manual Dexterity
+```{r}
+ggplot(Dat1, aes(x = mABC_ManualDexterity.Component.StandardScore, y = SRS_TotalRawScore, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth(aes(color=PrimaryDiagnosis))
+```
+
+Observations:
+
+There is not a large effect on the Social Responsiveness Total Score from the mABC Manual Dexterity Component Score. The SRS Total Raw Score stayed about the same as the Manual Dexterity Component Score increases for children diagnosed with ADHD and typically developing children. There is a slight negative correlation for children diagnosed with Autism
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to Manual Dexterity Component Scores
+```{r}
+fit3 <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat1)
+Dat1$yhat <- predict(fit3, newdata = Dat1)
+Dat1$resid2 <- Dat1$SRS_TotalRawScore - Dat1$yhat
+
+ggplot(Dat1, aes(x=mABC_ManualDexterity.Component.StandardScore, y=resid2, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth() + geom_hline(yintercept=0, color='purple') + ylab('Residual')
+```
+
+Observations:
+
+There seems to be a relationship between the Manual Dexterity Component Score and the residuals, with higher scores tending to have higher residuals for all three diagnosis.
+
+
+mABC Balance Component
+```{r}
+ggplot(Dat1, aes(x = mABC_Balance.Component.StandardScore, y = SRS_TotalRawScore, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth(aes(color=PrimaryDiagnosis))
+```
+
+Observations:
+
+For children diagnosed with ADHD, their SRS total score decreases as the balance component score increases, which implies a negative relationship between SRS total score and balance score. Children diagnosed with Autism and typically developing children have almost constant SRS total scores compared to the balance score.
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to Balance Component Scores
+```{r}
+Dat1$yhat <- predict(fit3, newdata = Dat1)
+Dat1$resid3 <- Dat1$SRS_TotalRawScore - Dat1$yhat
+
+ggplot(Dat1, aes(x=mABC_Balance.Component.StandardScore, y=resid3, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth() + geom_hline(yintercept=0, color='purple') + ylab('Residual')
+```
+
+Observations:
+
+There is a relationship between the residuals and the Balance Component Score. As the Balance Component Score increases, the residuals increase. There is a stronger positive correlation in children diagnosed with Autism and typically developing children compared to children diagnosed with ADHD.
+
+
+Aiming and Catching
+```{r}
+ggplot(Dat1, aes(x = mABC_AimingAndCatching.Component.StandardScore, y = SRS_TotalRawScore, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth(aes(color=PrimaryDiagnosis))
+```
+
+Observations:
+
+Children diagnosed with autism have the highest SRS total scores. Children diagnosed with ADHD and typically developing children have almost constant SRS total scores compared to the balance score. Typically developing children have the lowest social responsiveness scale which implies the lowest social deficit.
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to Aiming and Catching Component Scores
+```{r}
+Dat1$yhat <- predict(fit3, newdata = Dat1)
+Dat1$resid4 <- Dat1$SRS_TotalRawScore - Dat1$yhat
+
+ggplot(Dat1, aes(x=mABC_AimingAndCatching.Component.StandardScore, y=resid4, group=PrimaryDiagnosis, color=PrimaryDiagnosis)) + geom_point() + geom_smooth() + geom_hline(yintercept=0, color='purple') + ylab('Residual')
+```
+
+Observations:
+
+There is a relationship between the residuals and the Aiming and Catching Component Score. As the Aiming and Catching Component Score increases, the residuals increase for all three diagnoses. Typically developing children and children diagnosed with ADHD have a similar positive, linear correlation. Children diagnosed with autism, show a non-linear relationship between the residuals and the Aiming and Catching Component Score.
+
+
+F test
+```{r}
+fit_manual <- lm(SRS_TotalRawScore ~ mABC_ManualDexterity.Component.StandardScore, data = Dat1)
+summary(fit_manual)
+fit_balance <- lm(SRS_TotalRawScore ~ mABC_Balance.Component.StandardScore, data = Dat1)
+summary(fit_balance)
+fit_aim <- lm(SRS_TotalRawScore ~ mABC_AimingAndCatching.Component.StandardScore, data = Dat1)
+summary(fit_aim)
+fit_full <- lm(SRS_TotalRawScore ~ mABC_ManualDexterity.Component.StandardScore + mABC_Balance.Component.StandardScore + mABC_AimingAndCatching.Component.StandardScore, data = Dat1)
+summary(fit_full)
+fit_tot <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat1)
+summary(fit_tot)
+
+
+(f1 <- var.test(fit_full, fit_manual))
+(f2 <- var.test(fit_full, fit_balance))
+(f3 <- var.test(fit_full, fit_aim))
+(f4 <- var.test(fit_full, fit_tot))
+```
+Observations:
+
+The best model includes all three component scores due to the highest adjusted R squared value, 0.2761.
+
+
+Intelligence
+```{r}
+
+Dat4$WISC4.GAI[is.na(Dat4$WISC4.GAI)] <- 0
+Dat4$WISC5.GAI[is.na(Dat4$WISC5.GAI)] <- 0
+Dat4$GAI <- Dat4$WISC4.GAI + Dat4$WISC5.GAI
+
+Dat4_GAI <- Dat4 %>%
+  filter(WISC4.GAI > 0)  
+
+ggplot(Dat4_GAI, aes(x = mABC_TotalStandardScore, y = GAI), group=PrimaryDiagnosis, color=PrimaryDiagnosis) + geom_point() + geom_smooth(aes(color=PrimaryDiagnosis)) 
+```
+
+Observations:
+
+There is a negative correlation between intelligence and total standard score for all three primary diagnoses. This correlation is strongest for children diagnosed with ADHD and weakest for typically developing children.
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to Intelligence
+```{r, warning = FALSE, echo=FALSE}
+Dat5 <- inner_join(Dat1, Dat4, by= 'ID')
+Dat5 <- Dat5 %>% 
+  filter(!GAI==0)
+
+ggplot(Dat5, aes(x=GAI, y=resid2, group=PrimaryDiagnosis.x, color=PrimaryDiagnosis.x)) + geom_point() + geom_smooth() + geom_hline(yintercept=0, color='purple') + ylab('Residual')
+```
+
+Observations:
+
+The slopes of the residuals for the social responsiveness vs. motor score model vs. the intelligence are approximately zero for all primary diagnoses.
+
+
+F-test for intelligence
+```{r}
+Dat5 <- inner_join(Dat4, SRS_Dat, by = "ID")
+
+fit_no_intelligence <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat5)
+
+fit_full_intelligence <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore + GAI, data = Dat5)
+
+fit_intelligence <- var.test(fit_full_intelligence, fit_no_intelligence)
+fit_intelligence
+```
+
+Observations:
+
+Intelligence should not be included in our model. The p-value, 0.9931, suggests that we do not reject null hypothesis which is to exclude intelligence. 
+
+
+Secondary Diagnosis
+```{r, warning = FALSE, echo=FALSE}
+Dat_Secondary <- Dat1 %>%
+  filter(SecondaryDiagnosis =='Yes' | SecondaryDiagnosis == 'No', !PrimaryDiagnosis == 'None')
+
+ggplot(Dat_Secondary, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore, group=SecondaryDiagnosis, color=SecondaryDiagnosis)) + geom_point() + geom_smooth(aes(color=SecondaryDiagnosis))
+```
+
+Observations:
+
+Children with a secondary diagnosis have higher social deficits on average than children with only a primary diagnosis. The negative correlation between social responsiveness and total motor score is weaker for children with a secondard diagnosis.
+
+
+F-test for secondary diagnosis
+```{r}
+fit_no_secondary <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat_Secondary)
+fit_full_secondary <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore + SecondaryDiagnosis, data = Dat_Secondary)
+
+fit_secondary <- var.test(fit_full_secondary, fit_no_secondary)
+fit_secondary
+```
+
+Observations:
+
+The secondary diagnosis should not be included in our model. The p-value, 0.526, suggests that we do not reject null hypothesis which is to exclude the secondary diagnosis.
+
+
+ADHD Subtype
+```{r, warning = FALSE, echo=FALSE}
+Dat_Subtype <- Dat1 %>%
+  filter(PrimaryDiagnosis == 'ADHD')
+
+ggplot(Dat_Subtype, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore, color=ADHD_Subtype)) + geom_point() + facet_wrap("ADHD_Subtype") + geom_smooth()
+```
+
+
+F-test for subtype
+```{r, warning = FALSE, echo=FALSE}
+fit_no_sub <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat_Subtype)
+
+fit_sub_full <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore + ADHD_Subtype, data = Dat_Subtype)
+
+fit_subtype <- var.test(fit_sub_full, fit_no_sub)
+fit_subtype
+```
+
+Observations:
+
+The ADHD subtype should be included in our model. The p-value, 0.4658, suggests that we reject null hypothesis: exclude the ADHD subtype. 
+
+
+SRS Version
+```{r, warning = FALSE, echo=FALSE}
+ggplot(Dat, aes(x = mABC_TotalStandardScore, y = SRS_TotalRawScore, group=SRS_VERSION, color=SRS_VERSION)) + geom_point() + facet_wrap(vars(PrimaryDiagnosis)) + geom_smooth()
+```
+
+Observations:
+
+SRS Version 2 has much higher scores compared for version 1 for typically developing children and slightly higher scores for children diagnosed with ADHD. SRS version 1 has higher scores for children diagnosed with Autism.
+
+
+Residuals of SRS Total Raw Score vs mABC Total Standard Score compared to SRS Version
+```{r, warning = FALSE, echo=FALSE}
+fit <- lm(SRS_TotalRawScore ~ mABC_TotalStandardScore, data = Dat)
+Dat$yhat <- predict(fit, newdata = Dat)
+Dat$resid <- Dat$SRS_TotalRawScore - Dat$yhat
+
+boxplot(resid~SRS_VERSION, data = Dat, main = "Residual Plot", xlab = "SRS Version", ylab = "Residual")
+```
+
+Observations:
+
+SRS Version 1 has the median of the residuals below zero while SRS version 2 has the median of the residuals above zero. SRS Version should be included in our model.
+
+
+Results
+
+Models:
+
+ADHD Model:
+
+p-value: 1.824e-05
+```{r, warning = FALSE, echo=FALSE}
+Dat_ADHD <- Dat1 %>%
+  filter(PrimaryDiagnosis=='ADHD')
+ADHD <- lm(SRS_TotalRawScore ~ mABC_ManualDexterity.Component.StandardScore + mABC_Balance.Component.StandardScore + mABC_AimingAndCatching.Component.StandardScore + mABC_AGE + x_sp + Gender + ADHD_Subtype + SRS_VERSION, data = Dat_ADHD)
+summary(ADHD)
+
+plot(ADHD)
+```
+
+Interpretation
+
+Coefficients:
+
+Manual Dexterity(0.06409) represents the expected change in SRS Total Raw Score for a one-unit change in Manual Dexterity Component Score, holding all other variables constant. 
+Balance(-1.56384) represents the expected change in SRS Total Raw Score for a one-unit change in Balance Component Score, holding all other variables constant.
+Aiming and Catching(0.36752) represents the expected change in SRS Total Raw Score for a one-unit change in Aiming and Catching Component Score, holding all other variables constant.
+Age(-1.59928): Between age 8 and 10, the expected change in SRS Total Raw Score for a one-unit change in age, holding all other variables constant.
+x_sp(4.37429): Between age 10 and 12, the expected change in SRS Total Raw Score for a one-unit change in age, holding other variables constant. 
+GenderM(-4.55502) represents the expected change in SRS Total Raw Score for males, holding all other variables contant. 
+Hyperactive Subtype(-14.15968) represents the expected change in SRS Total Raw Score for a one-unit change in children diagnosed with the Hyperactive Subtype, holding all other variables constant. 
+Inattentive Subtype(-13.02203) represents the expected change in SRS Total Raw Score for a one-unit change in children diagnosed with the Inattentive Subtype, holding all other variables constant. 
+
+
+Autism Model:
+
+p-value: 0.7278
+```{r, warning = FALSE, echo=FALSE}
+Dat_ASD <- Dat1 %>%
+  filter(PrimaryDiagnosis=='Autism')
+ASD <- lm(SRS_TotalRawScore ~ mABC_ManualDexterity.Component.StandardScore + mABC_Balance.Component.StandardScore + mABC_AimingAndCatching.Component.StandardScore + mABC_AGE + x_sp + Gender + SRS_VERSION, data = Dat_ASD)
+summary(ASD)
+
+plot(ASD)
+```
+
+Interpretation
+
+Coefficients:
+
+Manual Dexterity(-0.8779) represents the expected change in SRS Total Raw Score for a one-unit change in Manual Dexterity Component Score,holding all other variables constant.
+Balance(1.0043) represents the expected change in SRS Total Raw Score for a one-unit change in Balance Component Score, holding all other variables constant.
+Aiming and Catching(-0.5870) represents the expected change in SRS Total Raw Score for a one-unit change in Aiming and Catching Component Score, holding all other variables constant.
+Age(0.1057): Between age 8 and 10, the expected change in SRS Total Raw Score for a one-unit change in age, holding all other variables constant.
+x_sp(4.4764):Between age 10 and 12, the expected change in SRS Total Raw Score for a one-unit change in age, holding other variables constant.
+GenderM(1.4821) represents the expected change in SRS Total Raw Score for males, holding all other variables contant.
+Low adjusted R-squared value could be due to much smaller sample size than children diagnosed with ADHD.
+
+
+Typically Developing Model:
+
+p-value: 0.3363
+```{r, warning = FALSE, echo=FALSE}
+Dat_TD <- Dat1 %>%
+  filter(PrimaryDiagnosis=='None')
+TD <- lm(SRS_TotalRawScore ~ mABC_ManualDexterity.Component.StandardScore + mABC_Balance.Component.StandardScore + mABC_AimingAndCatching.Component.StandardScore + mABC_AGE + x_sp + Gender + SRS_VERSION, data = Dat_TD)
+summary(TD)
+
+plot(TD)
+```
+
+Interpretation
+
+Coefficients:
+
+Manual Dexterity(-0.4042) represents the expected change in SRS Total Raw Score for a one-unit change in Manual Dexterity Component Score,holding all other variables constant.
+Balance(-0.4580) represents the expected change in SRS Total Raw Score for a one-unit change in Balance Component Score, holding all other variables constant.
+Aiming and Catching(0.5061) represents the expected change in SRS Total Raw Score for a one-unit change in Aiming and Catching Component Score, holding all other variables constant.
+Age(-2.3304): Between age 8 and 10, the expected change in SRS Total Raw Score for a one-unit change in age, holding all other variables constant.
+x_sp(3.3712): Between age 10 and 12, the expected change in SRS Total Raw Score for a one-unit change in age, holding other variables constant.
+GenderM(0.7239) represents the expected change in SRS Total Raw Score for males, holding all other variables contant.
+
+
+
+Hypothesis Tests:
+
+Four different F-Tests were performed in this analysis. The first F-Test compared models with individual component scores and the total standard score. The best model includes the total standard score due to the highest adjusted R squared value, 0.2686. Another F-Test was executed looking at the intelligence. The p-value, 0.9931, suggests that we do not reject null hypothesis which is to exclude intelligence. Thus intelligence should not be included in our model. The secondary diagnosis was also not included in our model. The p-value, 0.526, suggests that we do not reject null hypothesis which is to exclude the secondary diagnosis. The final F-Test concluded that the ADHD subtype should be included in the model. The p-value, 0.4658, suggests that we reject null hypothesis: exclude the ADHD subtype. 
+
+
+
+Conclusion:
+
+Based on the exploratory analysis, there is a relationship between motor skills and social responsiveness in autism and ADHD. There is motor impairment in children diagnosed with Autism or ADHD. Children diagnosed with Autism have lower mABC Total Standard Scores and higher Social Responsiveness Total Scores than children diagnosed with ADHD. Typically developing children have the highest mABC Total Standard Scores and lowest Social Responsiveness Total Scores. Age and gender are included in these models as control variables. Age is part of a spline model due to the total motor score not increasing after age ten. Gender has a larger effect on the social responsiveness and motor skills relationship for children diagnosed with ADHD or ASD compared to typically developing children. Intelligence and medication does not have an affect on the relationship between motor skills and social responsiveness. Manual Dexterity, Balance, and Aiming and Catching all affect the relationship between motor skills and social responsiveness; they are all predictors of social responsiveness.
+
+
+
+Citations:
+
+“Understanding ADHD -- the Basics. WebMD, WebMD, www.webmd.com/add-adhd/childhood-adhd/understanding-adhd-basics.
+
+“Understanding Autism -- the Basics. WebMD, WebMD, www.webmd.com/brain/autism/understanding-autism-basics#1.
