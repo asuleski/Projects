@@ -14,3 +14,5 @@ There are a variety of projects from my undergraduate career at Indiana Universi
   * Create a variety of models to predict heart disease from a variety of health statistics
 * The Name Game (3/2019) 
   * Explore how names vary based on gender, ethnicity, and geography
+* Effects of ADHD and ASD (11/2018)
+  * Determine the relationship between motor skills and social responsiveness in children who are diagnosed with Autism and ADHD compared to typically developing children
